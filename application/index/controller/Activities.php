@@ -25,16 +25,10 @@ use think\Request;
 class Activities
 {
     public function index() {
-        $activities = Db::table(Activity::TABLE_NAME)
-            ->where('title|content','like',  '%编号：1%')
-            ->where('publish_time', '>', '1990-10-10 00:00')
-            ->order('publish_time', 'desc')
-            ->limit(20)
-            ->select();
-        return $activities;
+        return Activity::get(101001);
     }
 
-
+    // 活动列表数据获取
     public function pull() {
         $request = Request::instance();
         $page_id = $request->get(Config::PARAM_KEY_PAGE_ID);
@@ -120,13 +114,54 @@ class Activities
             $response->status = Config::STATUS_OK_BUT_EMPTY;
             return $response;
         }
-        $response->code = Config::CODE_OK;
-        $response->status = Config::STATUS_OK;
-        $response->data = Activities::buildActivitySimpleData($activities, $uid);
-        return $response;
+        $data = Activities::buildActivityListData($activities, $uid);
+        return Response::newSuccessInstance($data);
     }
 
-    private function buildActivitySimpleData($activities, $curUid) {
+    // 单个活动数据获取
+    public function fetchOne() {
+        $request = Request::instance();
+        $activity_id = $request->get(Config::PARAM_KEY_ACTIVITY_ID);
+        $curUid = $request->get(Config::PARAM_KEY_UID);
+        $activity = Activity::get($activity_id);
+        if ($activity == null) {
+            $response = new Response();
+            $response->code = Config::CODE_FAIL;
+            $response->status = Config::STATUS_NO_DATA;
+            return $response;
+        }
+        $temp = new ActivityResponseBean();
+        $temp->id = $activity->id;
+        $temp->type = $activity->type;
+        $temp->title = $activity->title;
+        $temp->content = $activity->content;
+        $temp->host = $activity->host;
+        $temp->time = $activity->time;
+        $temp->address = $activity->address;
+        $temp->remark = $activity->remark;
+        $temp->location = $activity->location;
+        $temp->publishTime = $activity->publish_time;
+        $temp->collectCount = Activities::getCollectCount($activity->id);
+        $temp->commentCount = Activities::getCommentCount($activity->id);
+        $temp->additionCount = Activities::getAdditionCount($activity->id);
+        $topic_name = Activities::getRelatedTopicName($activity->related_topic_id);
+        if ($topic_name != null) {
+            $temp->topicId = $activity->related_topic_id;
+            $temp->topic = $topic_name;
+        } else {
+            $temp->topicId = -1;
+        }
+        $temp->pictureList = Activities::getPictureList($activity->id);
+        $temp->hasCollect = $this->hasCollected($activity->id, $curUid);
+        // 获取用户的基本数据
+        $user = User::get($activity->publisher_uid);
+        $temp->uid = $user->uid;
+        $temp->nickname = $user->nickname;
+        $temp->avatarUrl = $user->avatar;
+        return Response::newSuccessInstance($temp);
+    }
+
+    private static function buildActivityListData($activities, $curUid) {
         // 组装数据返回
         $result = array();
         foreach ($activities as $key => $activity) {
@@ -143,50 +178,76 @@ class Activities
             $temp->publishTime = $activity['publish_time'];
             $result[$key] = $temp;
             // 获取收藏数量
-            $temp->collectCount = Db::table(ActivityCollectRelation::TABLE_NAME)
-                ->where(ActivityCollectRelation::COLUMN_ACTIVITY_ID, $activity['id'])
-                ->count('*');
+            $temp->collectCount = Activities::getCollectCount($activity['id']);
             // 获取评论数量
-            $temp->commentCount = Db::table(ActivityComment::TABLE_NAME)
-                ->where(ActivityComment::COLUMN_ACTIVITY_ID, $activity['id'])
-                ->count('*');
+            $temp->commentCount = Activities::getCommentCount($activity['id']);
             // 获取评论数量
-            $temp->additionCount = Db::table(ActivityAddition::TABLE_NAME)
-                ->where(ActivityAddition::COLUMN_ACTIVITY_ID, $activity['id'])
-                ->count('*');
+            $temp->additionCount = Activities::getAdditionCount($activity['id']);
             // 获取话题名称
-            $temp->topicId = -1;
-            if ($activity['related_topic_id'] != null) {
-                $topic = Db::table(Topic::TABLE_NAME)
-                    ->where(Topic::COLUMN_ID, $activity['related_topic_id'])
-                    ->column('name');
-                if (count($topic)) {
-                    $temp->topicId = $activity['related_topic_id'];
-                    $temp->topic = $topic[0];
-                }
+            $topic_name = Activities::getRelatedTopicName($activity['related_topic_id']);
+            if ($topic_name != null) {
+                $temp->topicId = $activity['related_topic_id'];
+                $temp->topic = $topic_name;
+            } else {
+                $temp->topicId = -1;
             }
             // 获取图片资源
-            $temp->pictureList = Db::table(ActivityPictureRelation::TABLE_NAME)
-                ->where(ActivityPictureRelation::COLUMN_ACTIVITY_ID, $activity['id'])
-                ->column(ActivityPictureRelation::COLUMN_URL);
+            $temp->pictureList = Activities::getPictureList($activity['id']);
             // 获取请求用户是否参与收藏
-            $temp->hasCollect = false;
-            if ($curUid != -1) {
-                $relation = Db::table(ActivityCollectRelation::TABLE_NAME)
-                    ->where(ActivityCollectRelation::COLUMN_ACTIVITY_ID, $activity['id'])
-                    ->where(ActivityCollectRelation::COLUMN_COLLECTOR_UID, $curUid)
-                    ->find();
-                if (count($relation) > 0) {
-                    $temp->hasCollect = true;
-                }
-            }
+            $temp->hasCollect = Activities::hasCollected($activity['id'], $curUid);
+
             // 获取用户的基本数据
             $user = User::get($activity['publisher_uid']);
             $temp->uid = $user->uid;
             $temp->nickname = $user->nickname;
             $temp->avatarUrl = $user->avatar;
-
         }
         return $result;
+    }
+
+    private static function getCollectCount($activity_id) {
+        return Db::table(ActivityCollectRelation::TABLE_NAME)
+            ->where(ActivityCollectRelation::COLUMN_ACTIVITY_ID, $activity_id)
+            ->count('*');
+    }
+
+    private static function getCommentCount($activity_id) {
+        return Db::table(ActivityComment::TABLE_NAME)
+            ->where(ActivityComment::COLUMN_ACTIVITY_ID, $activity_id)
+            ->count('*');
+    }
+
+    private static function getAdditionCount($activity_id) {
+        return Db::table(ActivityAddition::TABLE_NAME)
+            ->where(ActivityAddition::COLUMN_ACTIVITY_ID, $activity_id)
+            ->count('*');
+    }
+
+    private static function hasCollected($activity_id, $curUid) {
+        $hasCollected = false;
+        if ($curUid != -1) {
+            $relation = Db::table(ActivityCollectRelation::TABLE_NAME)
+                ->where(ActivityCollectRelation::COLUMN_ACTIVITY_ID, $activity_id)
+                ->where(ActivityCollectRelation::COLUMN_COLLECTOR_UID, $curUid)
+                ->limit(1)
+                ->find();
+            $hasCollected = ($relation != null);
+        }
+        return $hasCollected;
+    }
+
+    private static function getRelatedTopicName($related_topic_id) {
+        $topic_name = null;
+        if ($related_topic_id != null) {
+            $topic = Topic::get($related_topic_id);
+            $topic_name = $topic != null ? $topic->name : null;
+        }
+        return $topic_name;
+    }
+
+    private static function getPictureList($activity_id) {
+        return Db::table(ActivityPictureRelation::TABLE_NAME)
+            ->where(ActivityPictureRelation::COLUMN_ACTIVITY_ID, $activity_id)
+            ->column(ActivityPictureRelation::COLUMN_URL);
     }
 }

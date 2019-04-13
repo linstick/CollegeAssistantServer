@@ -14,11 +14,13 @@ class Config
     // 响应状态码
     const CODE_OK = 0;
     const CODE_OK_BUT_EMPTY = 1;
-    const CODE_ILLEGAL_ACCESS = -1;
+    const CODE_FAIL = -1;
+    const CODE_ILLEGAL_ACCESS = -2;
     const CODE_UNKOWN_ERROR = -3;
     // 响应状态描述
     const STATUS_OK = 'OK';
-    const STATUS_OK_BUT_EMPTY = '无相关数据';
+    const STATUS_OK_BUT_EMPTY = '暂无更多相关数据';
+    const STATUS_NO_DATA = '无指定数据';
     const STATUS_ERROR_ILLEGAL_ACCESS = '非法访问';
     const STATUS_ERROR_UNKONW = '发生未知错误';
 
