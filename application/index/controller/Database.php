@@ -11,6 +11,7 @@ namespace app\index\controller;
 
 use app\index\config\Config;
 use app\index\model\Activity;
+use app\index\model\ActivityAddition;
 use app\index\model\ActivityCollectRelation;
 use app\index\model\ActivityComment;
 use app\index\model\ActivityPictureRelation;
@@ -37,9 +38,12 @@ class Database
 //        Database::createDiscoverPictureData();
 //        Database::createActivityCommentData();
 //        Database::createDiscoverCommentData();
-//        Database::createActivityCollectData();
-//        Database::createDiscoverLikeData();
+//        Database::createActivityAdditionData();
 //        Database::createTopicVisitData();
+//                Database::createActivityCollectData();
+//                Database::createDiscoverLikeData();
+
+
 
         return 'success';
     }
@@ -166,6 +170,21 @@ class Database
         }
     }
 
+    private function createActivityAdditionData() {
+        $temp = 1;
+        for ($i = 1; $i < Database::$user_count; $i++) {
+            // 产生的评论数量
+            $count = rand(-3, 5);
+            for ($j = 0; $j < $count; $j++) {
+                // 创建补充数据
+                $addition = new ActivityAddition();
+                $addition->content = "这是活动的补充内容".($temp++);
+                $addition->activity_id = $i;
+                $addition->save();
+            }
+        }
+    }
+
     private function createActivityCollectData() {
         for ($i = 1; $i < Database::$user_count; $i++) {
             $count = rand(-10, 30);
@@ -181,7 +200,7 @@ class Database
                 $collectRelation->activity_id = $i;
                 $collectRelation->collector_uid = $collector_uid;
                 $collectRelation->save();
-                $collector_uid += rand(20, 30);
+                $collector_uid += rand(10, 30);
 
                 // 产生收藏消息
                 $message = new Message();
@@ -297,7 +316,7 @@ class Database
                 $likeRelation->discover_id = $discover->id;
                 $likeRelation->liker_uid = $liker_uid;
                 $likeRelation->save();
-                $liker_uid += rand(15, 30);
+                $liker_uid += rand(10, 30);
 
                 // 产生点赞消息
                 $message = new Message();

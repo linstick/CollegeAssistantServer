@@ -13,5 +13,11 @@ use think\Model;
 
 class Topic extends Model
 {
-
+    const TABLE_NAME = 'topic';
+    const COLUMN_ID = 'id';
+    const COLUMN_NAME = 'name';
+    const COLUMN_DESCRIPTION = 'description';
+    const COLUMN_COVER = 'cover';
+    const COLUMN_PUBLISHER_UID = 'publisher_uid';
+    const COLUMN_PUBLISH_TIME = 'publish_time';
 }

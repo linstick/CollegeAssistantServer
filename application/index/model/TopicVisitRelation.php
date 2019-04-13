@@ -13,5 +13,7 @@ use think\Model;
 
 class TopicVisitRelation extends Model
 {
-
+    const TABLE_NAME = 'topic_visit_relation';
+    const TOPIC_ID = 'topic_id';
+    const VISITOR_UID = 'visitor_uid';
 }

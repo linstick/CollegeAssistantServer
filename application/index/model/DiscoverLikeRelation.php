@@ -13,5 +13,7 @@ use think\Model;
 
 class DiscoverLikeRelation extends Model
 {
-
+    const TABLE_NAME = 'discover_like_relation';
+    const COLUMN_DISCOVER_ID = 'discover_id';
+    const COLUMN_LIKER_UID = 'liker_uid';
 }

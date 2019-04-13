@@ -13,5 +13,11 @@ use think\Model;
 
 class Discover extends Model
 {
-
+    const TABLE_NAME = 'discover';
+    const COLUMN_ID = 'id';
+    const COLUMN_CONTENT = 'content';
+    const COLUMN_RELATED_TOPIC_ID = 'related_topic_id';
+    const COLUMN_LOCATION = 'location';
+    const COLUMN_PUBLISHER_UID = 'publisher_uid';
+    const COLUMN_PUBLISH_TIME = 'publish_time';
 }

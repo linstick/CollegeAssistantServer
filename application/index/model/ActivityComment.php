@@ -13,5 +13,10 @@ use think\Model;
 
 class ActivityComment extends Model
 {
-
+    const TABLE_NAME = 'activity_comment';
+    const COLUMN_ID = 'id';
+    const COLUMN_CONTENT = 'content';
+    const COLUMN_ACTIVITY_ID = 'activity_id';
+    const COLUMN_PUBLISHER_UID = 'publisher_uid';
+    const COLUMN_PUBLISH_TIME = 'publish_time';
 }
