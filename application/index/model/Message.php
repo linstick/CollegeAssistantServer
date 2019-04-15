@@ -9,6 +9,7 @@
 namespace app\index\model;
 
 
+use app\index\config\Config;
 use think\Model;
 
 class Message extends Model
@@ -21,6 +22,14 @@ class Message extends Model
     const COLUMN_TARGET_TITLE = 'target_title';
     const COLUMN_TARGET_CONTENT = 'target_content';
     const COLUMN_TARGET_COVER = 'target_cover';
-    const COLUMN_RELATED_UID = 'related_uid';
+    const COLUMN_RECEIVER_UID = 'receiver_uid';
+    const COLUMN_CREATOR_UID = 'creator_uid';
     const COLUMN_CREATE_TIME = 'create_time';
+
+    public function getTargetCoverAttr($value) {
+        if ($value == null) {
+            return null;
+        }
+        return Config::IMAGE_PREFIX_URL.$value;
+    }
 }

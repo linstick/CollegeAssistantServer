@@ -41,7 +41,7 @@ class Database
 //        Database::createActivityAdditionData();
 //        Database::createTopicVisitData();
 //                Database::createActivityCollectData();
-//                Database::createDiscoverLikeData();
+                Database::createDiscoverLikeData();
 
 
 
@@ -53,7 +53,7 @@ class Database
             $user = new User();
             $user->id = 'user'.$i;
             $user->nickname = "昵称".$i;
-            $user->avatar = rand(1, 10).'.jpg';
+            $user->avatar = rand(1, 20).'.jpg';
             $user->gender = rand(0, 1) == 0 ? '男' : '女';
             $user->age = rand(10, 40);
             $user->password = 'user';
@@ -80,7 +80,7 @@ class Database
             $topic->name = '话题'.$i;
             $topic->description = '这是话题描述，一般是话题发布者对这个话题的一些看法，编号：'.$i;
             if (rand(0, 2) != 2) {
-                $topic->cover = rand(1, 10).'.jpeg';
+                $topic->cover = rand(1, 20).'.jpg';
             }
             $topic->publisher_uid = $i;
             $topic->save();
@@ -161,7 +161,8 @@ class Database
                 $message->target_id = $i;
                 $message->target_title = $activity->title;
                 $message->target_content = $activity->content;
-                $message->related_uid = $activity->publisher_uid;
+                $message->receiver_uid = $activity->publisher_uid;
+                $message->creator_uid = $comment->publisher_uid;
                 if ($pictureRelation != null) {
                     $message->target_cover = $pictureRelation->url;
                 }
@@ -209,7 +210,8 @@ class Database
                 $message->target_id = $i;
                 $message->target_title = $activity->title;
                 $message->target_content = $activity->content;
-                $message->related_uid = $activity->publisher_uid;
+                $message->receiver_uid = $activity->publisher_uid;
+                $message->creator_uid = $collectRelation->collector_uid;
                 if ($pictureRelation != null) {
                     $message->target_cover = $pictureRelation->url;
                 }
@@ -242,7 +244,8 @@ class Database
                 $topic_name = $topic->name;
                 $message->target_title = '#'.$topic_name.'#';
                 $message->target_content = $topic->description;
-                $message->related_uid = $topic->publisher_uid;
+                $message->receiver_uid = $topic->publisher_uid;
+                $message->creator_uid = $discover->publisher_uid;
                 $message->target_cover = $topic->cover;
                 $message->save();
 
@@ -292,7 +295,8 @@ class Database
                 $message->content = $comment->content;
                 $message->target_id = $i;
                 $message->target_content = $discover->content;
-                $message->related_uid = $discover->publisher_uid;
+                $message->receiver_uid = $discover->publisher_uid;
+                $message->creator_uid = $comment->publisher_uid;
                 if ($pictureRelation != null) {
                     $message->target_cover = $pictureRelation->url;
                 }
@@ -324,7 +328,8 @@ class Database
                 $message->content = 'TA赞了这个动态';
                 $message->target_id = $i;
                 $message->target_content = $discover->content;
-                $message->related_uid = $discover->publisher_uid;
+                $message->receiver_uid = $discover->publisher_uid;
+                $message->creator_uid = $likeRelation->liker_uid;
                 if ($pictureRelation != null) {
                     $message->target_cover = $pictureRelation->url;
                 }

@@ -9,6 +9,7 @@
 namespace app\index\model;
 
 
+use app\index\config\Config;
 use think\Model;
 
 class ActivityPictureRelation extends Model
@@ -17,4 +18,11 @@ class ActivityPictureRelation extends Model
     const COLUMN_ACTIVITY_ID = 'activity_id';
     const COLUMN_URL = 'url';
     const COLUMN_ORDER_NUMBER = 'order_number';
+
+    public function getUrlAttr($value) {
+        if ($value == null) {
+            return null;
+        }
+        return Config::IMAGE_PREFIX_URL.$value;
+    }
 }

@@ -9,6 +9,7 @@
 namespace app\index\model;
 
 
+use app\index\config\Config;
 use think\Model;
 
 class User extends Model
@@ -24,4 +25,12 @@ class User extends Model
     const COLUMN_EMAIL = 'email';
     const COLUMN_DESCRIPTION = 'description';
     const COLUMN_SIGN_TIME = 'sign_time';
+    const COLUMN_PASSWORD = 'password';
+
+    public function getAvatarAttr($value) {
+        if ($value == null) {
+            return null;
+        }
+        return Config::IMAGE_PREFIX_URL.$value;
+    }
 }

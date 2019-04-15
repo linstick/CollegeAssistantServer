@@ -101,34 +101,26 @@ class Activities
                     break;
             }
         }
-        $response = new Response();
         if ($activities == null) {
             // 非法访问
-            $response->code = Config::CODE_ILLEGAL_ACCESS;
-            $response->status = Config::STATUS_ERROR_ILLEGAL_ACCESS;
-            return $response;
+            return Response::newIllegalInstance();
         }
         if ($activities->isEmpty()){
             // 无数据
-            $response->code = Config::CODE_OK_BUT_EMPTY;
-            $response->status = Config::STATUS_OK_BUT_EMPTY;
-            return $response;
+            return Response::newEmptyInstance();
         }
         $data = Activities::buildActivityListData($activities, $uid);
         return Response::newSuccessInstance($data);
     }
 
     // 单个活动数据获取
-    public function fetchOne() {
+    public function fetchDetail() {
         $request = Request::instance();
         $activity_id = $request->get(Config::PARAM_KEY_ACTIVITY_ID);
         $curUid = $request->get(Config::PARAM_KEY_UID);
         $activity = Activity::get($activity_id);
         if ($activity == null) {
-            $response = new Response();
-            $response->code = Config::CODE_FAIL;
-            $response->status = Config::STATUS_NO_DATA;
-            return $response;
+            return Response::newNoDataInstance();
         }
         $temp = new ActivityResponseBean();
         $temp->id = $activity->id;
@@ -141,18 +133,18 @@ class Activities
         $temp->remark = $activity->remark;
         $temp->location = $activity->location;
         $temp->publishTime = $activity->publish_time;
-        $temp->collectCount = Activities::getCollectCount($activity->id);
-        $temp->commentCount = Activities::getCommentCount($activity->id);
-        $temp->additionCount = Activities::getAdditionCount($activity->id);
-        $topic_name = Activities::getRelatedTopicName($activity->related_topic_id);
+        $temp->collectCount = self::getCollectCount($activity->id);
+        $temp->commentCount = self::getCommentCount($activity->id);
+        $temp->additionCount = self::getAdditionCount($activity->id);
+        $topic_name = self::getRelatedTopicName($activity->related_topic_id);
         if ($topic_name != null) {
             $temp->topicId = $activity->related_topic_id;
             $temp->topic = $topic_name;
         } else {
             $temp->topicId = -1;
         }
-        $temp->pictureList = Activities::getPictureList($activity->id);
-        $temp->hasCollect = $this->hasCollected($activity->id, $curUid);
+        $temp->pictureList = self::getPictureList($activity->id);
+        $temp->hasCollect = self::hasCollected($activity->id, $curUid);
         // 获取用户的基本数据
         $user = User::get($activity->publisher_uid);
         $temp->uid = $user->uid;
@@ -178,13 +170,13 @@ class Activities
             $temp->publishTime = $activity['publish_time'];
             $result[$key] = $temp;
             // 获取收藏数量
-            $temp->collectCount = Activities::getCollectCount($activity['id']);
+            $temp->collectCount = self::getCollectCount($activity['id']);
             // 获取评论数量
-            $temp->commentCount = Activities::getCommentCount($activity['id']);
+            $temp->commentCount = self::getCommentCount($activity['id']);
             // 获取评论数量
-            $temp->additionCount = Activities::getAdditionCount($activity['id']);
+            $temp->additionCount = self::getAdditionCount($activity['id']);
             // 获取话题名称
-            $topic_name = Activities::getRelatedTopicName($activity['related_topic_id']);
+            $topic_name = self::getRelatedTopicName($activity['related_topic_id']);
             if ($topic_name != null) {
                 $temp->topicId = $activity['related_topic_id'];
                 $temp->topic = $topic_name;
@@ -192,9 +184,9 @@ class Activities
                 $temp->topicId = -1;
             }
             // 获取图片资源
-            $temp->pictureList = Activities::getPictureList($activity['id']);
+            $temp->pictureList = self::getPictureList($activity['id']);
             // 获取请求用户是否参与收藏
-            $temp->hasCollect = Activities::hasCollected($activity['id'], $curUid);
+            $temp->hasCollect = self::hasCollected($activity['id'], $curUid);
 
             // 获取用户的基本数据
             $user = User::get($activity['publisher_uid']);
@@ -246,8 +238,11 @@ class Activities
     }
 
     private static function getPictureList($activity_id) {
-        return Db::table(ActivityPictureRelation::TABLE_NAME)
-            ->where(ActivityPictureRelation::COLUMN_ACTIVITY_ID, $activity_id)
-            ->column(ActivityPictureRelation::COLUMN_URL);
+        $result = array();
+        $relation = ActivityPictureRelation::where(ActivityPictureRelation::COLUMN_ACTIVITY_ID, $activity_id)->select();
+        foreach ($relation as $key => $value) {
+            $result[$key] = $value->url;
+        }
+        return $result;
     }
 }
