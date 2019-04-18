@@ -25,14 +25,18 @@ use think\Request;
 class Activities
 {
     public function index() {
-        return Activity::get(101001);
+        $request = Request::instance();
+        $time_stamp = $request->get(Config::PARAM_KEY_TIME_STAMP);
+        $result = strcmp(Config::DEFAULT_TIME_STAMP, $time_stamp);
+        return $result;
     }
 
     // 活动列表数据获取
     public function pull() {
         $request = Request::instance();
         $page_id = $request->get(Config::PARAM_KEY_PAGE_ID);
-        $time_opt = $request->get(Config::PARAM_KEY_PULL_TYPE) == Config::PULL_TYPE_REFRESH ? '>' : '<';
+        $pull_type = $request->get(Config::PARAM_KEY_PULL_TYPE);
+        $time_opt = $pull_type == Config::PULL_TYPE_REFRESH ? '>' : '<';
         $request_count = $request->get(Config::PARAM_KEY_REQUEST_COUNT);
         $time_stamp = $request->get(Config::PARAM_KEY_TIME_STAMP);
         $uid = $request->get(Config::PARAM_KEY_UID);
@@ -88,14 +92,11 @@ class Activities
                 case Config::PAGE_ID_ACTIVITY_SEARCH:
                     // 搜索活动查询
                     $keyword = $request->get(Config::PARAM_KEY_KEYWORD);
-                    $field = Activity::COLUMN_TITLE.'|'.Activity::COLUMN_TITLE.'|'.Activity::COLUMN_LOCATION;
-                    $condition = '%'.$keyword.'%';
-                    $activities = Db::table(Activity::TABLE_NAME)
-                        ->where(Activity::COLUMN_PUBLISH_TIME, $time_opt, $time_stamp)
-                        ->where($field,Config::WORD_LIKE,  $condition)
-                        ->order(Activity::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
-                        ->limit($request_count)
-                        ->select();
+                    $offset = $request->get(Config::PARAM_KEY_OFFSET);
+                    $activities = self::search($keyword, $offset, $request_count);
+                    if ($activities->isEmpty()) {
+                        return Response::newNoSearchResult();
+                    }
                     break;
                 default:
                     break;
@@ -106,7 +107,12 @@ class Activities
             return Response::newIllegalInstance();
         }
         if ($activities->isEmpty()){
-            // 无数据
+            if ($pull_type == Config::PULL_TYPE_REFRESH && strcmp($time_stamp, Config::DEFAULT_TIME_STAMP) == 0) {
+                // 第一次请求
+                return Response::newNoDataInstance();
+            }
+            // 非第一次请求
+            // 无更多数据数据
             return Response::newEmptyInstance();
         }
         $data = Activities::buildActivityListData($activities, $uid);
@@ -153,7 +159,7 @@ class Activities
         return Response::newSuccessInstance($temp);
     }
 
-    private static function buildActivityListData($activities, $curUid) {
+    private static function buildActivityListData($activities, $uid) {
         // 组装数据返回
         $result = array();
         foreach ($activities as $key => $activity) {
@@ -186,7 +192,7 @@ class Activities
             // 获取图片资源
             $temp->pictureList = self::getPictureList($activity['id']);
             // 获取请求用户是否参与收藏
-            $temp->hasCollect = self::hasCollected($activity['id'], $curUid);
+            $temp->hasCollect = self::hasCollected($activity['id'], $uid);
 
             // 获取用户的基本数据
             $user = User::get($activity['publisher_uid']);
@@ -195,6 +201,51 @@ class Activities
             $temp->avatarUrl = $user->avatar;
         }
         return $result;
+    }
+
+    public static function search($keyword, $offset, $request_count) {
+        $field = Activity::COLUMN_TITLE.'|'.Activity::COLUMN_TITLE.'|'.Activity::COLUMN_LOCATION;
+        $condition = "%$keyword%";
+        $activities = Db::table(Activity::TABLE_NAME)
+            ->where($field,Config::WORD_LIKE,  $condition)
+            ->order(Activity::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
+            ->limit($offset, $request_count)
+            ->select();
+        return $activities;
+    }
+
+    public static function searchHot($request_count) {
+        $hot_activities = ActivityComment::field('activity_id as id, count(activity_id) as commentCount')
+            ->group(ActivityComment::COLUMN_ACTIVITY_ID)
+            ->order('commentCount', Config::WORD_DESC)
+            ->limit($request_count)
+            ->select();
+        foreach ($hot_activities as $activity) {
+            $activity['title'] = self::getActivityTitle($activity['id']);
+        }
+        return $hot_activities;
+    }
+
+    public static function searchSimple($keyword, $request_count) {
+        $field = Activity::COLUMN_TITLE;
+        $condition = "%$keyword%";
+        $activities = Activity::where($field,Config::WORD_LIKE,  $condition)
+            ->order(Activity::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
+            ->field(Activity::COLUMN_ID.','.Activity::COLUMN_TITLE)
+            ->limit($request_count)
+            ->select();
+        foreach ($activities as $activity) {
+            $activity['commentCount'] = self::getCommentCount($activity['id']);
+        }
+    }
+
+    public static function searchAndBuildSimpleList($keyword, $offset, $request_count, $uid) {
+        $activities = self::search($keyword, $offset, $request_count);
+        return self::buildActivityListData($activities, $uid);
+    }
+
+    private static function getActivityTitle($activity_id) {
+        return Activity::get($activity_id)->title;
     }
 
     private static function getCollectCount($activity_id) {

@@ -32,19 +32,35 @@ use think\Request;
 
 class Discovers
 {
+    public function index() {
+        $topic_id = 434;
+        // 话题相关动态的集合
+        return Db::table('discover d')
+            ->join('discover_comment c', 'd.id=c.discover_id', 'left')
+            ->where('d.id', 'in', function ($query) use ($topic_id) {
+                $query->table('topic_join_relation')->where('topic_id', $topic_id)->field('discover_id');
+            })
+            ->field('d.*, count(c.discover_id) as count')
+            ->group('c.discover_id')
+            ->order('count', 'desc')
+            ->select();
+    }
+
     // 活动列表数据获取
     public function pull() {
         $request = Request::instance();
         $page_id = $request->get(Config::PARAM_KEY_PAGE_ID);
-        $time_opt = $request->get(Config::PARAM_KEY_PULL_TYPE) == Config::PULL_TYPE_REFRESH ? '>' : '<';
+        $pull_type = $request->get(Config::PARAM_KEY_PULL_TYPE);
+        $time_opt = $pull_type == Config::PULL_TYPE_REFRESH ? '>' : '<';
         $request_count = $request->get(Config::PARAM_KEY_REQUEST_COUNT);
         $time_stamp = $request->get(Config::PARAM_KEY_TIME_STAMP);
         $uid = $request->get(Config::PARAM_KEY_UID);
-        $discover = null;
+        $offset = $request->get(Config::PARAM_KEY_OFFSET);
+        $discovers = null;
         switch ($page_id) {
             case Config::PAGE_ID_DISCOVER_ALL:
                 // 全部活动查询
-                $discover = Db::table(Discover::TABLE_NAME)
+                $discovers = Db::table(Discover::TABLE_NAME)
                     ->where(Discover::COLUMN_PUBLISH_TIME, $time_opt, $time_stamp)
                     ->order(Discover::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
                     ->limit($request_count)
@@ -52,7 +68,7 @@ class Discovers
                 break;
             case Config::PAGE_ID_DISCOVER_SELF:
                 // 用户自己的活动查询
-                $discover = Db::table(Discover::TABLE_NAME)
+                $discovers = Db::table(Discover::TABLE_NAME)
                     ->where(Discover::COLUMN_PUBLISHER_UID, $uid)
                     ->where(Discover::COLUMN_PUBLISH_TIME, $time_opt, $time_stamp)
                     ->order(Discover::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
@@ -62,7 +78,7 @@ class Discovers
             case Config::PAGE_ID_DISCOVER_OTHER_USER:
                 // 其他用户的活动查询
                 $other_uid = $request->get(Config::PARAM_KEY_OTHER_UID);
-                $discover = Db::table(Discover::TABLE_NAME)
+                $discovers = Db::table(Discover::TABLE_NAME)
                     ->where(Discover::COLUMN_PUBLISHER_UID, $other_uid)
                     ->where(Discover::COLUMN_PUBLISH_TIME, $time_opt, $time_stamp)
                     ->order(Discover::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
@@ -71,21 +87,18 @@ class Discovers
                 break;
             case Config::PAGE_ID_DISCOVER_SEARCH:
                 // 搜索动态查询
+                $offset = $request->get(Config::PARAM_KEY_OFFSET);
                 $keyword = $request->get(Config::PARAM_KEY_KEYWORD);
-                $field = Discover::COLUMN_CONTENT.'|'.Discover::COLUMN_LOCATION;
-                $condition = '%'.$keyword.'%';
-                $discover = Db::table(Discover::TABLE_NAME)
-                    ->where(Discover::COLUMN_PUBLISH_TIME, $time_opt, $time_stamp)
-                    ->where($field,Config::WORD_LIKE,  $condition)
-                    ->order(Discover::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
-                    ->limit($request_count)
-                    ->select();
+                $discovers = self::search($keyword, $offset, $request_count, $uid);
+                if ($discovers->isEmpty()) {
+                    return Response::newNoSearchResult();
+                }
                 break;
-            case Config::PAGE_ID_DISCOVER_TOPIC:
+            case Config::PAGE_ID_DISCOVER_TOPIC_LASTED:
                 // 参与话题的动态数据查询
                 $topic_id = $request->get(Config::PARAM_KEY_TOPIC_ID);
                 $view_join_condition = TopicJoinRelation::TABLE_NAME.'.'.TopicJoinRelation::COLUMN_DISCOVER_ID.'='.Discover::TABLE_NAME.'.'.Discover::COLUMN_ID;
-                $discover = Db::view(TopicJoinRelation::TABLE_NAME, TopicJoinRelation::COLUMN_DISCOVER_ID)
+                $discovers = Db::view(TopicJoinRelation::TABLE_NAME, TopicJoinRelation::COLUMN_DISCOVER_ID)
                     ->view(Discover::TABLE_NAME, '*', $view_join_condition)
                     ->where(TopicJoinRelation::COLUMN_TOPIC_ID, $topic_id)
                     ->where(Discover::TABLE_NAME.'.'.Discover::COLUMN_PUBLISH_TIME, $time_opt, $time_stamp)
@@ -93,16 +106,35 @@ class Discovers
                     ->limit($request_count)
                     ->select();
                 break;
+            case Config::PAGE_ID_DISCOVER_TOPIC_HOT:
+                $topic_id = $request->get(Config::PARAM_KEY_TOPIC_ID);
+                $discovers = Db::table('discover d')
+                    ->join('discover_comment c', 'd.id=c.discover_id', 'left')
+                    ->where('d.id', 'in', function ($query) use ($topic_id) {
+                        $query->table('topic_join_relation')->where('topic_id', $topic_id)->field('discover_id');
+                    })
+                    ->field('d.*, count(c.discover_id) as count')
+                    ->group('c.discover_id')
+                    ->order('count', 'desc')
+                    ->limit($offset, $request_count)
+                    ->select();
+                break;
             default:
                 break;
         }
-        if ($discover == null) {
+        if ($discovers == null) {
             return Response::newIllegalInstance();
         }
-        if ($discover->isEmpty()){
+        if ($discovers->isEmpty()){
+            if ($pull_type == Config::PULL_TYPE_REFRESH && strcmp($time_stamp, Config::DEFAULT_TIME_STAMP) == 0) {
+                // 第一次请求
+                return Response::newNoDataInstance();
+            }
+            // 非第一次请求
+            // 无更多数据数据
             return Response::newEmptyInstance();
         }
-        $data = self::buildTopicListData($discover, $uid);
+        $data = self::buildDiscoverListData($discovers, $uid);
         return Response::newSuccessInstance($data);
     }
 
@@ -143,10 +175,52 @@ class Discovers
         return Response::newSuccessInstance($temp);
     }
 
-    private static function buildTopicListData($discover, $curUid) {
+    public static function search($keyword, $offset, $request_count) {
+        $field = Discover::COLUMN_CONTENT.'|'.Discover::COLUMN_LOCATION;
+        $condition = "%$keyword%";
+        $discovers = Db::table(Discover::TABLE_NAME)
+            ->where($field,Config::WORD_LIKE,  $condition)
+            ->order(Discover::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
+            ->limit($offset, $request_count)
+            ->select();
+        return $discovers;
+    }
+
+    public static function searchHot($request_count) {
+        $hot_discovers = DiscoverComment::field('discover_id as id, count(discover_id) as commonCount')
+            ->group(DiscoverComment::COLUMN_DISCOVER_ID)
+            ->order('commonCount', Config::WORD_DESC)
+            ->limit($request_count)
+            ->select();
+        foreach ($hot_discovers as $discover) {
+            $discover['content'] = self::getContent($discover['id']);
+        }
+        return $hot_discovers;
+    }
+
+    public static function searchSimple($keyword, $request_count) {
+        $field = Discover::COLUMN_CONTENT;
+        $condition = "%$keyword%";
+        $discovers = Discover::where($field,Config::WORD_LIKE,  $condition)
+            ->order(Discover::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
+            ->field(Discover::COLUMN_ID.','.Discover::COLUMN_CONTENT)
+            ->limit($request_count)
+            ->select();
+        foreach ($discovers as $discover) {
+            $discover['commentCount'] = self::getCommentCount($discover['id']);
+        }
+        return $discovers;
+    }
+
+    public static function searchAndBuildSimpleList($keyword, $offset, $request_count, $uid) {
+        $discovers = self::search($keyword, $offset, $request_count);
+        return self::buildDiscoverListData($discovers, $uid);
+    }
+
+    private static function buildDiscoverListData($discovers, $uid) {
         // 组装数据返回
         $result = array();
-        foreach ($discover as $key => $discover) {
+        foreach ($discovers as $key => $discover) {
             $temp = new DiscoverResponseBean();
             $temp->id = $discover['id'];
             $temp->content = $discover['content'];
@@ -168,7 +242,7 @@ class Discovers
             // 获取图片资源
             $temp->pictureList = self::getPictureList($discover['id']);
             // 获取请求用户是否参与收藏
-            $temp->hasLike = self::hasLiked($discover['id'], $curUid);
+            $temp->hasLike = self::hasLiked($discover['id'], $uid);
 
             // 获取用户的基本数据
             $user = User::get($discover['publisher_uid']);
@@ -178,6 +252,10 @@ class Discovers
             $temp->college = self::getCollegeName($discover['publisher_uid']);
         }
         return $result;
+    }
+
+    private static function getContent($discover_id) {
+        return Discover::get($discover_id)->content;
     }
 
     private static function getLikeCount($discover_id) {

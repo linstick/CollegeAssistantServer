@@ -22,4 +22,9 @@ class UserResponseBean
     public $description;
     public $signTime;
     public $collegeInfo;
+
+    public $activityCount;
+    public $topicCount;
+    public $discoverCount;
+    public $collectCount;
 }

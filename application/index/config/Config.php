@@ -16,8 +16,8 @@ class Config
     const CODE_OK = 0;
     const CODE_OK_BUT_EMPTY = 1;
     const CODE_ERROR = -1;
-    const CODE_NO_DATA = -1;
-    const CODE_ILLEGAL_ACCESS = -2;
+    const CODE_NO_DATA = -2;
+    const CODE_ILLEGAL_ACCESS = -3;
     const CODE_UNKOWN_ERROR = -3;
     // 响应状态描述
     const STATUS_OK = 'OK';
@@ -26,10 +26,11 @@ class Config
     const STATUS_ERROR_ILLEGAL_ACCESS = '非法访问';
     const STATUS_ERROR_UNKONW = '发生未知错误';
     const STATUS_LOGIN_FAIL = '登录失败，账号或密码错误';
-    const STATUS_ACCOUNT_EXISTS = '账号已存在，请使用其他字符';
+    const STATUS_ACCOUNT_EXISTS = '账号已存在，请重新修改';
     const STATUS_TOPIC_NAME_EXISTS = '话题已存在';
     const STATUS_PASSWORD_NOT_MATCH = '原密码错误，请检查';
     const STATUS_SIGN_OUT_FAIL = '注销失败，用户不存在';
+    const STATUS_NO_SEARCH_RESULT = '没有搜索到相关数据';
 
     // 消息类型
     const MESSAGE_TYPE_ACTIVITY_COMMENT = 0;
@@ -57,12 +58,13 @@ class Config
     const PAGE_ID_TOPIC_OTHER_USER = 18;
     const PAGE_ID_TOPIC_SEARCH = 19;
     const PAGE_ID_DISCOVER_OTHER_USER = 20;
-    const PAGE_ID_ACTIVITY_TOPIC = 21;
-    const PAGE_ID_DISCOVER_TOPIC = 22;
+    const PAGE_ID_DISCOVER_TOPIC_HOT = 21;
+    const PAGE_ID_DISCOVER_TOPIC_LASTED = 22;
     const PAGE_ID_DISCOVER_SEARCH = 23;
     const PAGE_ID_ACTIVITY_COMMENT = 24;
     const PAGE_ID_ACTIVITY_ADDITION = 25;
     const PAGE_ID_DISCOVER_COMMENT = 26;
+    const PAGE_ID_USER_SEARCH = 27;
 
     // 定义可拉加载页面的数据加载类型
     const PULL_TYPE_REFRESH = 0;
@@ -85,11 +87,18 @@ class Config
     const PARAM_KEY_NICKNAME = "nickname";
     const PARAM_KEY_PASSWORD = "password";
     const PARAM_KEY_NEW_PASSWORD = "new_password";
+    const PARAM_KEY_OFFSET = "offset";  // 分页
 
 
     const WORD_LIKE = 'like';
     const WORD_AND = 'and';
     const WORD_OR = 'or';
+    const WORD_IN = 'in';
+    const WORD_LEFT = 'left';
     const WORD_ASC = 'asc';
     const WORD_DESC = 'desc';
+
+    const MAX_REQUEST_COUNT = 30;
+    // 默认列表更新请求时提供的时间
+    const DEFAULT_TIME_STAMP = "1970-1-1 00:00:00";
 }

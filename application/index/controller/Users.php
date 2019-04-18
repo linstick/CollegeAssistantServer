@@ -10,7 +10,11 @@ namespace app\index\controller;
 
 
 use app\index\config\Config;
+use app\index\model\Activity;
+use app\index\model\ActivityCollectRelation;
 use app\index\model\CollegeInfo;
+use app\index\model\Discover;
+use app\index\model\Topic;
 use app\index\model\User;
 use app\index\response\Response;
 use app\index\response\UserResponseBean;
@@ -24,7 +28,20 @@ class Users
     }
 
     public function pull() {
-
+        $request = Request::instance();
+        $keyword = $request->get(Config::PARAM_KEY_KEYWORD);
+        $page_id = $request->get(Config::PARAM_KEY_PAGE_ID);
+        $offset = $request->get(Config::PARAM_KEY_OFFSET);
+        $request_count = $request->get(Config::PARAM_KEY_REQUEST_COUNT);
+        if ($page_id != Config::PAGE_ID_USER_SEARCH || $keyword == null) {
+            return Response::newIllegalInstance();
+        }
+        $offset == max($offset, 0);
+        $users = self::search($keyword, $offset, $request_count);
+        if (empty($users)) {
+            return Response::newNoSearchResult();
+        }
+        return Response::newSuccessInstance($users);
     }
 
     /**
@@ -36,8 +53,8 @@ class Users
      */
     public function login() {
         $request = Request::instance();
-        $account = $request->get(Config::PARAM_KEY_ACCOUNT);
-        $password = $request->get(Config::PARAM_KEY_PASSWORD);
+        $account = $request->post(Config::PARAM_KEY_ACCOUNT);
+        $password = $request->post(Config::PARAM_KEY_PASSWORD);
         if ($account == null || $password == null) {
             return Response::newIllegalInstance();
         }
@@ -63,6 +80,9 @@ class Users
     public function fetchDetail() {
         $request = Request::instance();
         $other_uid = $request->get(Config::PARAM_KEY_OTHER_UID);
+        if ($other_uid == null) {
+            return Response::newIllegalInstance();
+        }
         $user = self::getUserInfo($other_uid, false);
         if ($user == null) {
             return Response::newNoDataInstance();
@@ -98,7 +118,7 @@ class Users
      * @throws \think\db\exception\ModelNotFoundException
      * @throws \think\exception\DbException
      */
-    public function checkAccount() {
+    public function checkAccountExist() {
         $request = Request::instance();
         $account = $request->get(Config::PARAM_KEY_ACCOUNT);
         if ($account == null) {
@@ -106,10 +126,7 @@ class Users
         }
         $condition = User::COLUMN_ID.'|'.User::COLUMN_EMAIL.'|'.User::COLUMN_EMAIL;
         $user = User::where($condition, $account)->find();
-        if ($user == null) {
-            return Response::newSuccessInstance(null);
-        }
-        return Response::newAccountExistsInstance();
+        return Response::newSuccessInstance($user == null ? false : true);
     }
 
     /**
@@ -119,9 +136,9 @@ class Users
      */
     public function modifyPassword() {
         $request = Request::instance();
-        $uid = $request->get(Config::PARAM_KEY_UID);
-        $password = $request->get(Config::PARAM_KEY_PASSWORD);
-        $new_password = $request->get(Config::PARAM_KEY_NEW_PASSWORD);
+        $uid = $request->post(Config::PARAM_KEY_UID);
+        $password = $request->post(Config::PARAM_KEY_PASSWORD);
+        $new_password = $request->post(Config::PARAM_KEY_NEW_PASSWORD);
         if ($uid == null || $password == null || $new_password == null) {
             return Response::newIllegalInstance();
         }
@@ -140,11 +157,18 @@ class Users
         return Response::newSuccessInstance(null);
     }
 
+    /**
+     * 用户注册
+     * @return Response
+     * @throws \think\db\exception\DataNotFoundException
+     * @throws \think\db\exception\ModelNotFoundException
+     * @throws \think\exception\DbException
+     */
     public function signUp() {
         $request = Request::instance();
-        $account = $request->get(Config::PARAM_KEY_ACCOUNT);
-        $nickname = $request->get(Config::PARAM_KEY_NICKNAME);
-        $password = $request->get(Config::PARAM_KEY_PASSWORD);
+        $account = $request->post(Config::PARAM_KEY_ACCOUNT);
+        $nickname = $request->post(Config::PARAM_KEY_NICKNAME);
+        $password = $request->post(Config::PARAM_KEY_PASSWORD);
         if ($account == null || $nickname == null || $password == null) {
             return Response::newIllegalInstance();
         }
@@ -161,9 +185,14 @@ class Users
         return Response::newSuccessInstance(self::getUserInfo($user->uid, true));
     }
 
+    /**
+     * 用户注销
+     * @return Response
+     * @throws \think\exception\DbException
+     */
     public function signOut() {
         $request = Request::instance();
-        $uid = $request->get(Config::PARAM_KEY_UID);
+        $uid = $request->post(Config::PARAM_KEY_UID);
         if ($uid == null) {
             return Response::newIllegalInstance();
         }
@@ -173,6 +202,43 @@ class Users
         }
         $user->delete();
         return Response::newSuccessInstance(null);
+    }
+
+    public static function search($keyword, $offset, $request_count) {
+        $field = User::COLUMN_ID.'|'.User::COLUMN_NICKNAME;
+        $condition = "%$keyword%";
+        $users = User::where($field, Config::WORD_LIKE, $condition)
+            ->field(User::COLUMN_ID.','.User::COLUMN_UID.','.User::COLUMN_NICKNAME.','.User::COLUMN_DESCRIPTION.','.User::COLUMN_AVATAR)
+            ->limit($offset, $request_count)
+            ->order(User::COLUMN_UID, Config::WORD_ASC)
+            ->select()
+            ->toArray();
+        return $users;
+    }
+
+    public static function searchHot($request_count) {
+        $hot_users = Activity::field('publisher_uid as uid, count(publisher_uid) as activityCount')
+            ->group(Activity::COLUMN_PUBLISHER_UID)
+            ->order('activityCount', Config::WORD_DESC)
+            ->limit($request_count)
+            ->select();
+        foreach ($hot_users as $user) {
+            $temp = User::get($user['uid']);
+            $user['nickname'] = $temp->nickname;
+            $user['avatar'] = $temp->avatar;
+        }
+        return $hot_users;
+    }
+
+    public static function searchSimple($keyword, $request_count) {
+        $field = User::COLUMN_NICKNAME;
+        $condition = "%$keyword%";
+        $users = User::where($field,Config::WORD_LIKE,  $condition)
+            ->order(User::COLUMN_UID, Config::WORD_DESC)
+            ->field(User::COLUMN_UID.','.User::COLUMN_NICKNAME.','.User::COLUMN_AVATAR)
+            ->limit($request_count)
+            ->select();
+        return $users;
     }
 
     private function getUserInfo($uid, $is_login) {
@@ -198,11 +264,35 @@ class Users
         if ($is_login) {
             $result->signTime = $obj->sign_time;
             $result->cellNumber = $obj->cell_number;
+            $result->collectCount = self::getCollectCount($obj->uid);
         }
-        $result->collegeInfo = Db::table(CollegeInfo::TABLE_NAME)
-            ->where(CollegeInfo::COLUMN_UID, $obj->uid)
+        $result->activityCount = self::getActivityCount($obj->uid);
+        $result->topicCount = self::getTopicCount($obj->uid);
+        $result->discoverCount = self::getDiscoverCount($obj->uid);
+        $result->collegeInfo = self::getCollegeInfo($obj->uid);
+        return $result;
+    }
+
+    private static function getCollectCount($uid) {
+        return ActivityCollectRelation::where(ActivityCollectRelation::COLUMN_COLLECTOR_UID, $uid)->count('*');
+    }
+
+    private static function getActivityCount($uid) {
+        return Activity::where(Activity::COLUMN_PUBLISHER_UID, $uid)->count('*');
+    }
+
+    private static function getTopicCount($uid) {
+        return Topic::where(Topic::COLUMN_PUBLISHER_UID, $uid)->count('*');
+    }
+
+    private static function getDiscoverCount($uid) {
+        return Discover::where(Discover::COLUMN_PUBLISHER_UID, $uid)->count('*');
+    }
+
+    private static function getCollegeInfo($uid) {
+        return Db::table(CollegeInfo::TABLE_NAME)
+            ->where(CollegeInfo::COLUMN_UID, $uid)
             ->limit(1)
             ->find();
-        return $result;
     }
 }

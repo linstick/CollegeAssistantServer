@@ -66,4 +66,11 @@ class Response
         $response->status = Config::STATUS_TOPIC_NAME_EXISTS;
         return $response;
     }
+
+    public static function  newNoSearchResult() {
+        $response = new Response();
+        $response->code = Config::CODE_OK_BUT_EMPTY;
+        $response->status = Config::STATUS_NO_SEARCH_RESULT;
+        return $response;
+    }
 }

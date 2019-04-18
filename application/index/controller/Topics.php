@@ -38,22 +38,23 @@ class Topics
     public function pull() {
         $request = Request::instance();
         $page_id = $request->get(Config::PARAM_KEY_PAGE_ID);
-        $time_opt = $request->get(Config::PARAM_KEY_PULL_TYPE) == Config::PULL_TYPE_REFRESH ? '>' : '<';
+        $pull_type = $request->get(Config::PARAM_KEY_PULL_TYPE);
+        $time_opt = $pull_type == Config::PULL_TYPE_REFRESH ? '>' : '<';
         $request_count = $request->get(Config::PARAM_KEY_REQUEST_COUNT);
         $time_stamp = $request->get(Config::PARAM_KEY_TIME_STAMP);
         $uid = $request->get(Config::PARAM_KEY_UID);
-        $topic = null;
+        $topics = null;
         switch ($page_id) {
             case Config::PAGE_ID_TOPIC_ALL:
                 // 全部话题查询
-                $topic =  Topic::where(Topic::COLUMN_PUBLISH_TIME, $time_opt, $time_stamp)
+                $topics =  Topic::where(Topic::COLUMN_PUBLISH_TIME, $time_opt, $time_stamp)
                     ->order(Topic::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
                     ->limit($request_count)
                     ->select();
                 break;
             case Config::PAGE_ID_TOPIC_SELF:
                 // 用户自己的话题查询
-                $topic =  Topic::where(Topic::COLUMN_PUBLISHER_UID, $uid)
+                $topics =  Topic::where(Topic::COLUMN_PUBLISHER_UID, $uid)
                     ->where(Topic::COLUMN_PUBLISH_TIME, $time_opt, $time_stamp)
                     ->order(Topic::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
                     ->limit($request_count)
@@ -62,7 +63,7 @@ class Topics
             case Config::PAGE_ID_TOPIC_OTHER_USER:
                 // 其他用户的话题查询
                 $other_uid = $request->get(Config::PARAM_KEY_OTHER_UID);
-                $topic = Topic::where(Topic::COLUMN_PUBLISHER_UID, $other_uid)
+                $topics = Topic::where(Topic::COLUMN_PUBLISHER_UID, $other_uid)
                     ->where(Topic::COLUMN_PUBLISH_TIME, $time_opt, $time_stamp)
                     ->order(Topic::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
                     ->limit($request_count)
@@ -70,25 +71,29 @@ class Topics
                 break;
             case Config::PAGE_ID_TOPIC_SEARCH:
                 // 搜索动态查询
+                $offset = $request->get(Config::PARAM_KEY_OFFSET);
                 $keyword = $request->get(Config::PARAM_KEY_KEYWORD);
-                $field = Topic::COLUMN_NAME.'|'.Topic::COLUMN_DESCRIPTION;
-                $condition = '%'.$keyword.'%';
-                $topic = Topic::where(Topic::COLUMN_PUBLISH_TIME, $time_opt, $time_stamp)
-                    ->where($field,Config::WORD_LIKE,  $condition)
-                    ->order(Topic::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
-                    ->limit($request_count)
-                    ->select();
+                $topics = self::search($keyword, $offset, $request_count);
+                if ($topics->isEmpty()) {
+                    return Response::newNoSearchResult();
+                }
                 break;
             default:
                 break;
         }
-        if ($topic == null) {
+        if ($topics == null) {
             return Response::newIllegalInstance();
         }
-        if ($topic->isEmpty()){
-           return Response::newEmptyInstance();
+        if ($topics->isEmpty()){
+            if ($pull_type == Config::PULL_TYPE_REFRESH && strcmp($time_stamp, Config::DEFAULT_TIME_STAMP) == 0) {
+                // 第一次请求
+                return Response::newNoDataInstance();
+            }
+            // 非第一次请求
+            // 无更多数据数据
+            return Response::newEmptyInstance();
         }
-        $data = self::buildTopicListData($topic, $uid);
+        $data = self::buildTopicListData($topics);
         return Response::newSuccessInstance($data);
     }
 
@@ -111,7 +116,7 @@ class Topics
         $temp->publishTime = $topic->publish_time;
         $temp->joinCount = self::getJoinCount($topic->id);
         $temp->visitCount = self::getVisitCount($topic->id);
-        $temp->discoverList = self::getDiscoverList($topic->id);
+        $temp->discoverList = self::getNormalDiscoverList($topic->id);
         // 获取用户的基本数据
         $user = User::get($topic->publisher_uid);
         $temp->uid = $user->uid;
@@ -120,21 +125,45 @@ class Topics
         return Response::newSuccessInstance($temp);
     }
 
+    public function fetchHotSimpleList() {
+        $request = Request::instance();
+        $request_count = $request->get(Config::PARAM_KEY_REQUEST_COUNT);
+        $request_count = $request_count == null ? 10 : $request_count;
+        $hot_topics = TopicJoinRelation::field('topic_id as id, count(topic_id) as joinCount')
+            ->group(TopicJoinRelation::COLUMN_TOPIC_ID)
+            ->order('joinCount', Config::WORD_DESC)
+            ->limit($request_count)
+            ->select();
+        if (count($hot_topics) == 0) {
+            return Response::newEmptyInstance();
+        }
+        self::buildHotSimpleListData($hot_topics);
+        return Response::newSuccessInstance($hot_topics);
+    }
+
     public function fetchSimpleList() {
         $request = Request::instance();
         $keyword = $request->get(Config::PARAM_KEY_KEYWORD);
         $request_count = $request->get(Config::PARAM_KEY_REQUEST_COUNT);
+        $page = $request->get(Config::PARAM_KEY_REQUEST_COUNT);
         if ($keyword == null) {
-            return Response::newNoDataInstance();
+            return Response::newIllegalInstance();
         }
+        $exist_topic = Topic::where(Topic::COLUMN_NAME, $keyword)
+            ->field(Topic::COLUMN_ID.','.Topic::COLUMN_NAME)->
+            find();
         $topics = Topic::where(Topic::COLUMN_NAME, Config::WORD_LIKE, $keyword.'%')
-            ->limit($request_count)
+            ->limit($page, $request_count)
             ->field(Topic::COLUMN_ID.','.Topic::COLUMN_NAME)
-            ->select();
-        if ($topics == null) {
-            return Response::newNoDataInstance();
+            ->select()
+            ->toArray();
+        if ($exist_topic != null) {
+            array_unshift($topics, $exist_topic);
         }
-        self::complegeSimpleListData($topics);
+        if (count($topics) == 0) {
+            return Response::newNoSearchResult();
+        }
+        self::completeSimpleListData($topics);
         return Response::newSuccessInstance($topics);
     }
 
@@ -145,20 +174,58 @@ class Topics
      * @throws \think\db\exception\ModelNotFoundException
      * @throws \think\exception\DbException
      */
-    public function checkName() {
+    public function checkNameExist() {
         $request = Request::instance();
         $topic_name = $request->get(Config::PARAM_KEY_TOPIC_NAME);
         if ($topic_name == null) {
             return Response::newIllegalInstance();
         }
         $topic = Topic::where(Topic::COLUMN_NAME, $topic_name)->find();
-        if ($topic == null) {
-            return Response::newSuccessInstance(null);
-        }
-        return Response::newTopicNameExistsInstance();
+        return Response::newSuccessInstance($topic == null ? false : true);
     }
 
-    private static function buildTopicListData($topics, $curUid) {
+    public static function search($keyword, $offset, $request_count) {
+        $field = Topic::COLUMN_NAME.'|'.Topic::COLUMN_DESCRIPTION;
+        $condition = "%$keyword%";
+        $topics = Topic::where($field,Config::WORD_LIKE,  $condition)
+            ->order(Topic::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
+            ->limit($offset, $request_count)
+            ->select();
+        return $topics;
+    }
+
+    public static function searchHot($request_count) {
+        $hot_topics = TopicJoinRelation::field('topic_id as id, count(topic_id) as joinCount')
+            ->group(TopicJoinRelation::COLUMN_TOPIC_ID)
+            ->order('joinCount', Config::WORD_DESC)
+            ->limit($request_count)
+            ->select();
+        foreach ($hot_topics as $topic) {
+            $topic['name'] = self::getTopicName($topic['id']);
+        }
+        return $hot_topics;
+    }
+
+    public static function searchSimple($keyword, $request_count) {
+        $field = Topic::COLUMN_NAME;
+        $condition = "%$keyword%";
+        $topics = Topic::where($field,Config::WORD_LIKE,  $condition)
+            ->order(Topic::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
+            ->field(Topic::COLUMN_ID.','.Topic::COLUMN_NAME)
+            ->limit($request_count)
+            ->select();
+        foreach ($topics as $topic) {
+            $topic['joinCount'] = self::getJoinCount($topic['id']);
+        }
+        return $topics;
+    }
+
+    public static function searchAndBuildSimpleList($keyword, $offset, $request_count) {
+        $topics = self::search($keyword, $offset, $request_count);
+        return self::buildTopicListData($topics);
+    }
+
+    private static function buildTopicListData($topics) {
         // 组装数据返回
         $result = array();
         foreach ($topics as $key => $topic) {
@@ -174,7 +241,7 @@ class Topics
             // 获取评论数量
             $temp->visitCount = self::getVisitCount($topic['id']);
             // 获取图片资源
-            $temp->discoverList = self::getDiscoverList($topic['id']);
+            $temp->discoverList = self::getHotDiscoverList($topic['id']);
 
             // 获取用户的基本数据
             $user = User::get($topic['publisher_uid']);
@@ -185,15 +252,27 @@ class Topics
         return $result;
     }
 
-    private static function complegeSimpleListData($topics) {
+    private static function buildHotSimpleListData($topics) {
         $result = array();
         foreach ($topics as $key => $topic) {
             $temp = new TopicResponseBean();
-            $topic['joinCount'] = self::getJoinCount($topic['id']);
+            $topic['name'] = self::getTopicName($topic['id']);
             $topic['visitCount'] = self::getVisitCount($topic['id']);
             $result[$key] = $temp;
         }
         return $result;
+    }
+
+    private static function completeSimpleListData($topics) {
+        foreach ($topics as $key => $topic) {
+            $topic['joinCount'] = self::getJoinCount($topic['id']);
+            $topic['visitCount'] = self::getVisitCount($topic['id']);
+        }
+    }
+
+    private static function getTopicName($topic_id) {
+        $topic = Topic::get($topic_id);
+        return $topic != null ? $topic->name : null;
     }
 
     private static function getJoinCount($topic_id) {
@@ -208,13 +287,27 @@ class Topics
             ->count('*');
     }
 
-    private static function getDiscoverList($topic_id) {
+    private static function getNormalDiscoverList($topic_id) {
         $view_join_condition = TopicJoinRelation::TABLE_NAME.'.'.TopicJoinRelation::COLUMN_DISCOVER_ID.'='.Discover::TABLE_NAME.'.'.Discover::COLUMN_ID;
         return Db::view(TopicJoinRelation::TABLE_NAME, TopicJoinRelation::COLUMN_DISCOVER_ID.','.TopicJoinRelation::COLUMN_PUBLISH_TIME)
             ->view(Discover::TABLE_NAME, Discover::COLUMN_CONTENT, $view_join_condition)
             ->where(TopicJoinRelation::COLUMN_TOPIC_ID, $topic_id)
             ->order(TopicJoinRelation::TABLE_NAME.'.'.TopicJoinRelation::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
             ->limit(5)
+            ->select();
+    }
+
+    private static function getHotDiscoverList($topic_id) {
+        $request_count = 5;
+        return Db::table('discover d')
+            ->join('discover_comment c', 'd.id=c.discover_id', 'left')
+            ->where('d.id', 'in', function ($query) use ($topic_id) {
+                $query->table('topic_join_relation')->where('topic_id', $topic_id)->field('discover_id');
+            })
+            ->field('d.*, count(c.discover_id) as count')
+            ->group('c.discover_id')
+            ->order('count', 'desc')
+            ->limit($request_count)
             ->select();
     }
 }

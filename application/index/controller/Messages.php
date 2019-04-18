@@ -38,7 +38,8 @@ class Messages
     public function pull() {
         $request = Request::instance();
         $page_id = $request->get(Config::PARAM_KEY_PAGE_ID);
-        $time_opt = $request->get(Config::PARAM_KEY_PULL_TYPE) == Config::PULL_TYPE_REFRESH ? '>' : '<';
+        $pull_type = $request->get(Config::PARAM_KEY_PULL_TYPE);
+        $time_opt = $pull_type == Config::PULL_TYPE_REFRESH ? '>' : '<';
         $request_count = $request->get(Config::PARAM_KEY_REQUEST_COUNT);
         $time_stamp = $request->get(Config::PARAM_KEY_TIME_STAMP);
         $uid = $request->get(Config::PARAM_KEY_UID);
@@ -54,6 +55,12 @@ class Messages
             return Response::newIllegalInstance();
         }
         if ($messages->isEmpty()){
+            if ($pull_type == Config::PULL_TYPE_REFRESH && strcmp($time_stamp, Config::DEFAULT_TIME_STAMP) == 0) {
+                // 第一次请求
+                return Response::newNoDataInstance();
+            }
+            // 非第一次请求
+            // 无更多数据数据
             return Response::newEmptyInstance();
         }
         $data = self::buildActivityListData($messages);
