@@ -14,6 +14,7 @@ use think\Model;
 class Discover extends Model
 {
     const TABLE_NAME = 'discover';
+
     const COLUMN_ID = 'id';
     const COLUMN_CONTENT = 'content';
     const COLUMN_RELATED_TOPIC_ID = 'related_topic_id';

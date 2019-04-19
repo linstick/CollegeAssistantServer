@@ -11,7 +11,7 @@ namespace app\index\config;
 
 class Config
 {
-    const IMAGE_PREFIX_URL = 'http://112.74.13.186/CollegeAssistantServer/public/image/';
+    const IMAGE_PREFIX_URL = 'http://112.74.13.186/CollegeAssistantServer/public/uploads/';
     // 响应状态码
     const CODE_OK = 0;
     const CODE_OK_BUT_EMPTY = 1;
@@ -31,6 +31,11 @@ class Config
     const STATUS_PASSWORD_NOT_MATCH = '原密码错误，请检查';
     const STATUS_SIGN_OUT_FAIL = '注销失败，用户不存在';
     const STATUS_NO_SEARCH_RESULT = '没有搜索到相关数据';
+    const STATUS_SIGN_UP_FAIL = '网络异常，注册失败';
+    const STATUS_MODIFY_PROFILE_FAIL = '网络异常，修改用户资料失败';
+    const STATUS_CREATE_TOPIC_FAIL = '网络异常，创建话题失败';
+    const STATUS_CREATE_ACTIVITY_FAIL = '网络异常，创建活动失败';
+    const STATUS_CREATE_DISCOVER_FAIL = '网络异常，创建动态失败';
 
     // 消息类型
     const MESSAGE_TYPE_ACTIVITY_COMMENT = 0;
@@ -87,7 +92,22 @@ class Config
     const PARAM_KEY_NICKNAME = "nickname";
     const PARAM_KEY_PASSWORD = "password";
     const PARAM_KEY_NEW_PASSWORD = "new_password";
-    const PARAM_KEY_OFFSET = "offset";  // 分页
+    const PARAM_KEY_OFFSET = "offset";
+    const PARAM_KEY_USER = "user";
+    const PARAM_KEY_ACTIVITY = "activity";
+    const PARAM_KEY_TOPIC = "topic";
+    const PARAM_KEY_FEEDBACK = "feedback";
+    const PARAM_KEY_IMPEACH = "impeach";
+    const PARAM_KEY_DISCOVER = "discover";
+    const PARAM_KEY_POSITIVE = "positive";
+    const PARAM_KEY_COMMENT = "comment";
+    const PARAM_KEY_COMMENT_ID = "comment_id";
+    const PARAM_KEY_ADDITION = "addition";
+    const PARAM_KEY_ADDITION_ID = "addition_id";
+
+
+    const PARAM_KEY_FILE = "file";
+    const PARAM_KEY_IMAGE = "image";
 
 
     const WORD_LIKE = 'like';

@@ -103,26 +103,10 @@ class Topics
         $topic_id = $request->get(Config::PARAM_KEY_TOPIC_ID);
         $topic = Topic::get($topic_id);
         if ($topic == null) {
-            $response = new Response();
-            $response->code = Config::CODE_NO_DATA;
-            $response->status = Config::STATUS_NO_DATA;
-            return $response;
+            return Response::newNoDataInstance();
         }
-        $temp = new TopicResponseBean();
-        $temp->id = $topic->id;
-        $temp->name = $topic->name;
-        $temp->coverUrl = $topic->cover;
-        $temp->introduction = $topic->description;
-        $temp->publishTime = $topic->publish_time;
-        $temp->joinCount = self::getJoinCount($topic->id);
-        $temp->visitCount = self::getVisitCount($topic->id);
-        $temp->discoverList = self::getNormalDiscoverList($topic->id);
-        // 获取用户的基本数据
-        $user = User::get($topic->publisher_uid);
-        $temp->uid = $user->uid;
-        $temp->nickname = $user->nickname;
-        $temp->avatarUrl = $user->avatar;
-        return Response::newSuccessInstance($temp);
+        $data = self::buildSingleTopicData($topic);
+        return Response::newSuccessInstance($data);
     }
 
     public function fetchHotSimpleList() {
@@ -180,8 +164,51 @@ class Topics
         if ($topic_name == null) {
             return Response::newIllegalInstance();
         }
-        $topic = Topic::where(Topic::COLUMN_NAME, $topic_name)->find();
-        return Response::newSuccessInstance($topic == null ? false : true);
+        return Response::newSuccessInstance(self::checkNameExists($topic_name));
+    }
+
+    public function create() {
+        $request = Request::instance();
+        $topic_json = $request->post(Config::PARAM_KEY_TOPIC);
+        $files = $request->file(Config::PARAM_KEY_IMAGE);
+        if ($topic_json == null) {
+            return Response::newIllegalInstance();
+        }
+        $topic_source = json_decode($topic_json);
+        // 检查话题名称是否存在
+        if (self::checkNameExists($topic_source->name)) {
+            return Response::newTopicNameExistsInstance();
+        }
+        // 上传封面
+        $cover = null;
+        if ($files) {
+            $file = $files[0];
+            $cover = Upload::uploadImage($file);
+            if ($cover == null) {
+                return Response::newErrorInstance(Config::STATUS_CREATE_TOPIC_FAIL);
+            }
+        }
+        $topic_source->cover = $cover;
+        $topic = self::createTopic($topic_source);
+        return Response::newSuccessInstance($topic);
+    }
+
+    public static function checkNameExists($name) {
+        $topic = Topic::where(Topic::COLUMN_NAME, $name)->find();
+        return $topic == null ? false : true;
+    }
+
+    public static function createTopic($topic_source) {
+        if ($topic_source == null) {
+            return null;
+        }
+        $topic = new Topic();
+        $topic->name = $topic_source->name;
+        $topic->description = $topic_source->introduction;
+        $topic->cover = $topic_source->cover;
+        $topic->publisher_uid = $topic_source->uid;
+        $topic->save();
+        return self::buildSingleTopicData(Topic::get($topic->id));
     }
 
     public static function search($keyword, $offset, $request_count) {
@@ -232,7 +259,7 @@ class Topics
             $temp = new TopicResponseBean();
             $temp->id = $topic['id'];
             $temp->name = $topic['name'];
-            $temp->coverUrl = $topic['cover'];
+            $temp->cover = $topic['cover'];
             $temp->introduction = $topic['description'];
             $temp->publishTime = $topic['publish_time'];
             $result[$key] = $temp;
@@ -250,6 +277,24 @@ class Topics
             $temp->avatarUrl = $user->avatar;
         }
         return $result;
+    }
+
+    private static function buildSingleTopicData($topic) {
+        $temp = new TopicResponseBean();
+        $temp->id = $topic->id;
+        $temp->name = $topic->name;
+        $temp->coverUrl = $topic->cover;
+        $temp->introduction = $topic->description;
+        $temp->publishTime = $topic->publish_time;
+        $temp->joinCount = self::getJoinCount($topic->id);
+        $temp->visitCount = self::getVisitCount($topic->id);
+        $temp->discoverList = self::getNormalDiscoverList($topic->id);
+        // 获取用户的基本数据
+        $user = User::get($topic->publisher_uid);
+        $temp->uid = $user->uid;
+        $temp->nickname = $user->nickname;
+        $temp->avatarUrl = $user->avatar;
+        return $temp;
     }
 
     private static function buildHotSimpleListData($topics) {

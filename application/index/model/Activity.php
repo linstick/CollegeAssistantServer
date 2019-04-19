@@ -14,6 +14,7 @@ use think\Model;
 class Activity extends Model
 {
     const TABLE_NAME = 'activity';
+
     const COLUMN_ID = 'id';
     const COLUMN_TYPE = 'type';
     const COLUMN_TITLE = 'title';

@@ -16,7 +16,7 @@ class TopicResponseBean
     public $avatarUrl;
 
     public $id;
-    public $coverUrl;
+    public $cover;
     public $name;
     public $introduction;
     public $publishTime;

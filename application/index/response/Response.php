@@ -32,6 +32,14 @@ class Response
         return $response;
     }
 
+    public static function newErrorInstance($status) {
+        $response = new Response();
+        $response->code = Config::CODE_ERROR;
+        $response->status = $status;
+        return $response;
+    }
+
+
     public static function newEmptyInstance() {
         $response = new Response();
         $response->code = Config::CODE_OK_BUT_EMPTY;

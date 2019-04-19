@@ -169,6 +169,7 @@ class Users
         $account = $request->post(Config::PARAM_KEY_ACCOUNT);
         $nickname = $request->post(Config::PARAM_KEY_NICKNAME);
         $password = $request->post(Config::PARAM_KEY_PASSWORD);
+        $files = $request->file(Config::PARAM_KEY_IMAGE);
         if ($account == null || $nickname == null || $password == null) {
             return Response::newIllegalInstance();
         }
@@ -177,8 +178,21 @@ class Users
         if ($user != null) {
             return Response::newAccountExistsInstance();
         }
+        $avatar = null;
+        if ($files) {
+            // 存在头像
+            $file = $files[0];
+            $avatar = Upload::uploadImage($file);
+            if ($avatar == null) {
+                $response = new Response();
+                $response->code = Config::CODE_ERROR;
+                $response->status = Config::STATUS_SIGN_UP_FAIL;
+                return $response;
+            }
+        }
         $user = new User();
         $user->id = $account;
+        $user->avatar = $avatar;
         $user->nickname = $nickname;
         $user->password = $password;
         $user->save();
@@ -202,6 +216,48 @@ class Users
         }
         $user->delete();
         return Response::newSuccessInstance(null);
+    }
+
+    public function modifyProfile() {
+        $request = Request::instance();
+        $user_json = $request->post(Config::PARAM_KEY_USER);
+        $files = $request->file(Config::PARAM_KEY_IMAGE);
+        if ($user_json == null) {
+            return Response::newIllegalInstance();
+        }
+        $avatar = null;
+        if ($files) {
+            $file = $files[0];
+            $avatar = Upload::uploadImage($file);
+            if ($avatar == null) {
+                $response = new Response();
+                $response->code = Config::CODE_ERROR;
+                $response->status = Config::STATUS_MODIFY_PROFILE_FAIL;
+                return $response;
+            }
+        }
+        $user = json_decode($user_json);
+        $origin_user = User::get($user->uid);
+        $origin_user->nickname = $user->nickname;
+        $origin_user->age = $user->age;
+        $origin_user->gender = $user->gender;
+        $origin_user->description = $user->description;
+        if ($avatar != null) {
+            $origin_user->avatar = $avatar;
+        }
+        $college_info = $user->collegeInfo;
+        $original_college_info = CollegeInfo::get($user->uid);
+        if ($original_college_info == null) {
+            $original_college_info = new CollegeInfo();
+        }
+        $original_college_info->name = $college_info->name;
+        $original_college_info->department = $college_info->department;
+        $original_college_info->major = $college_info->major;
+        $original_college_info->klass = $college_info->klass;
+        $origin_user->save();
+        $original_college_info->save();
+        $data = self::getUserInfo($origin_user->uid, true);
+        return Response::newSuccessInstance($data);
     }
 
     public static function search($keyword, $offset, $request_count) {

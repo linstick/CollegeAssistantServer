@@ -24,6 +24,7 @@ use app\index\model\Topic;
 use app\index\model\TopicJoinRelation;
 use app\index\model\User;
 use app\index\response\ActivityResponseBean;
+use app\index\response\CreateDiscoverResultResponseBean;
 use app\index\response\DiscoverResponseBean;
 use app\index\response\Response;
 use think\Db;
@@ -142,37 +143,90 @@ class Discovers
     public function fetchDetail() {
         $request = Request::instance();
         $activity_id = $request->get(Config::PARAM_KEY_DISCOVER_ID);
-        $curUid = $request->get(Config::PARAM_KEY_UID);
+        $uid = $request->get(Config::PARAM_KEY_UID);
         $discover = Discover::get($activity_id);
         if ($discover == null) {
-            $response = new Response();
-            $response->code = Config::CODE_NO_DATA;
-            $response->status = Config::STATUS_NO_DATA;
-            return $response;
+            return Response::newNoDataInstance();
         }
-        $temp = new DiscoverResponseBean();
-        $temp->id = $discover->id;
-        $temp->content = $discover->content;
-        $temp->location = $discover->location;
-        $temp->publishTime = $discover->publish_time;
-        $temp->likeCount = self::getLikeCount($discover->id);
-        $temp->commentCount = self::getCommentCount($discover->id);
-        $topic_name = self::getRelatedTopicName($discover->related_topic_id);
-        if ($topic_name != null) {
-            $temp->topicId = $discover->related_topic_id;
-            $temp->topic = $topic_name;
-        } else {
-            $temp->topicId = -1;
+        $data = self::buildSingleDiscoverData($discover, $uid);
+        return Response::newSuccessInstance($data);
+    }
+
+    /**
+     * 创建动态（可能会同时创建话题）
+     * @return Response
+     * @throws \think\exception\DbException
+     */
+    public function create() {
+        $request = Request::instance();
+        $discover_json = $request->post(Config::PARAM_KEY_DISCOVER);
+        $topic_json = $request->post(Config::PARAM_KEY_TOPIC);
+        $files = $request->file(Config::PARAM_KEY_IMAGE);
+        if ($discover_json == null) {
+            return Response::newIllegalInstance();
         }
-        $temp->pictureList = Discovers::getPictureList($discover->id);
-        $temp->hasLike = self::hasLiked($discover->id, $curUid);
-        // 获取用户的基本数据
-        $user = User::get($discover->publisher_uid);
-        $temp->uid = $user->uid;
-        $temp->nickname = $user->nickname;
-        $temp->avatarUrl = $user->avatar;
-        $temp->college = self::getCollegeName($discover['publisher_uid']);
-        return Response::newSuccessInstance($temp);
+        $topic = null;
+        $discover = null;
+        $has_topic_cover = false;
+        $images = array();
+        $topic_source = $topic_json != null ? json_decode($topic_json) : null;
+        if ($topic_source != null) {
+            // 创建活动并创建话题
+            if (Topics::checkNameExists($topic_source->name)) {
+                return Response::newTopicNameExistsInstance();
+            }
+            if ($topic_source->cover != null) {
+                // 存在话题封面
+                $has_topic_cover = true;
+                $file = $files[0];
+                $cover = Upload::uploadImage($file);
+                if ($cover == null) {
+                    return Response::newErrorInstance(Config::STATUS_CREATE_DISCOVER_FAIL);
+                }
+                $topic_source->cover = $cover;
+            }
+        }
+        if ($files) {
+            $i = $has_topic_cover ? 1 : 0;
+            foreach ($files as $key => $file) {
+                if ($key < $i) {
+                    continue;
+                }
+                $imageUrl = Upload::uploadImage($file);
+                if ($imageUrl == null) {
+                    return Response::newErrorInstance(Config::STATUS_CREATE_DISCOVER_FAIL);
+                }
+                $images[] = $imageUrl;
+            }
+        }
+        // 创建话题
+        if ($topic_source != null) {
+            $topic = Topics::createTopic($topic_source);
+        }
+        // 创建活动
+        $discover_source = json_decode($discover_json);
+        $discover = new Discover();
+        $discover->content = $discover_source->content;
+        if ($topic != null) {
+            $discover->related_topic_id = $topic->id;
+        } else if ($discover_source->topicId != null){
+            $discover->related_topic_id = $discover_source->topicId;
+        }
+        $discover->location = $discover_source->location;
+        $discover->publisher_uid = $discover_source->uid;
+        $discover->save();
+        // 保存活动图片
+        foreach ($images as $key => $image) {
+            $relation = new DiscoverPictureRelation();
+            $relation->discover_id = $discover->id;
+            $relation->url = $image;
+            $relation->order_number = $key;
+            $relation->save();
+        }
+        $data = new CreateDiscoverResultResponseBean();
+        $data->discover = self::buildSingleDiscoverData(Discover::get($discover->id), $discover->publisher_uid);
+        $data->topic = $topic;
+        return Response::newSuccessInstance($data);
     }
 
     public static function search($keyword, $offset, $request_count) {
@@ -252,6 +306,32 @@ class Discovers
             $temp->college = self::getCollegeName($discover['publisher_uid']);
         }
         return $result;
+    }
+
+    private function buildSingleDiscoverData($discover, $uid) {
+        $temp = new DiscoverResponseBean();
+        $temp->id = $discover->id;
+        $temp->content = $discover->content;
+        $temp->location = $discover->location;
+        $temp->publishTime = $discover->publish_time;
+        $temp->likeCount = self::getLikeCount($discover->id);
+        $temp->commentCount = self::getCommentCount($discover->id);
+        $topic_name = self::getRelatedTopicName($discover->related_topic_id);
+        if ($topic_name != null) {
+            $temp->topicId = $discover->related_topic_id;
+            $temp->topic = $topic_name;
+        } else {
+            $temp->topicId = -1;
+        }
+        $temp->pictureList = Discovers::getPictureList($discover->id);
+        $temp->hasLike = self::hasLiked($discover->id, $uid);
+        // 获取用户的基本数据
+        $user = User::get($discover->publisher_uid);
+        $temp->uid = $user->uid;
+        $temp->nickname = $user->nickname;
+        $temp->avatarUrl = $user->avatar;
+        $temp->college = self::getCollegeName($discover['publisher_uid']);
+        return $temp;
     }
 
     private static function getContent($discover_id) {
