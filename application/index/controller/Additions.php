@@ -70,18 +70,62 @@ class Additions
         return Response::newSuccessInstance($data);
     }
 
-    private static function buildAdditionListData($comments) {
+    /**
+     * 添加评论（活动/动态）
+     */
+    public function add() {
+        $request = Request::instance();
+        $activity_id =  $request->post(Config::PARAM_KEY_ACTIVITY_ID);
+        $text = $request->post(Config::PARAM_KEY_ADDITION);
+        if ($activity_id == null || $text == null) {
+            return Response::newIllegalInstance();
+        }
+        $addition = new ActivityAddition();
+        $addition->content = $text;
+        $addition->activity_id = $activity_id;
+        $addition->save();
+        $data = self::buildSingleAdditionData(ActivityAddition::get($addition->id));
+        return Response::newSuccessInstance($data);
+    }
+
+    /**
+     * 删除评论（活动/动态）
+     */
+    public function delete() {
+        $request = Request::instance();
+        $addition_id = $request->get(Config::PARAM_KEY_ADDITION_ID);
+        if ($addition_id == null) {
+            return Response::newIllegalInstance();
+        }
+        $addition = ActivityAddition::get($addition_id);
+        if ($addition == null) {
+            return Response::newIllegalInstance();
+        }
+        $addition->delete();
+        return Response::newSuccessInstance($addition);
+    }
+
+    private static function buildAdditionListData($additions) {
         // 组装数据返回
         $result = array();
-        foreach ($comments as $key => $comment) {
+        foreach ($additions as $key => $addition) {
             $temp = new AdditionResponseBean();
-            $temp->id = $comment['id'];
-            $temp->activityId = $comment['activity_id'];
-            $temp->content = $comment['content'];
-            $temp->publishTime = $comment['publish_time'];
-            $result[$key] = $temp;
+            $temp->id = $addition['id'];
+            $temp->activityId = $addition['activity_id'];
+            $temp->content = $addition['content'];
+            $temp->publishTime = $addition['publish_time'];
+            $result[] = $temp;
         }
         return $result;
+    }
+
+    private static function buildSingleAdditionData($addition) {
+        $temp = new AdditionResponseBean();
+        $temp->id = $addition->id;
+        $temp->activityId = $addition->activity_id;
+        $temp->content = $addition->content;
+        $temp->publishTime = $addition->publish_time;
+        return $temp;
     }
 
 }

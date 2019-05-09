@@ -11,6 +11,7 @@ namespace app\index\response;
 
 class MessageResponseBean
 {
+    public $id;
     public $uid;
     public $nickname;
     public $avatarUrl;

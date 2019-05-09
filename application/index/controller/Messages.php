@@ -45,7 +45,8 @@ class Messages
         $uid = $request->get(Config::PARAM_KEY_UID);
         $messages = null;
         if ($page_id == Config::PAGE_ID_MESSAGE) {
-            $messages = Db::table(Message::TABLE_NAME)->where(Message::COLUMN_RECEIVER_UID, $uid)
+            $messages = Db::table(Message::TABLE_NAME)
+                ->where(Message::COLUMN_RECEIVER_UID, $uid)
                 ->where(Message::COLUMN_CREATE_TIME, $time_opt, $time_stamp)
                 ->order(Message::COLUMN_CREATE_TIME, Config::WORD_DESC)
                 ->limit($request_count)
@@ -67,16 +68,35 @@ class Messages
         return Response::newSuccessInstance($data);
     }
 
+    /**
+     * 删除消息
+     * @return Response
+     * @throws \think\exception\DbException
+     */
+    public function delete() {
+        $request = Request::instance();
+        $message_id = $request->get(Config::PARAM_KEY_MESSAGE_ID);
+        $message = Message::get($message_id);
+        if ($message == null) {
+            return Response::newIllegalInstance();
+        }
+        $message->delete();
+        return Response::newSuccessInstance($message);
+    }
+
     private static function buildActivityListData($messages) {
         // 组装数据返回
         $result = array();
         foreach ($messages as $key => $message) {
             $temp = new MessageResponseBean();
+            $temp->id = $message['id'];
             $temp->content = $message['content'];
             $temp->type = $message['type'];
             $temp->publishTime = $message['create_time'];
             $temp->targetId = $message['target_id'];
-            $temp->targetCoverUrl = $message['target_cover'];
+            if ($message['target_cover'] != null) {
+                $temp->targetCoverUrl = Config::IMAGE_PREFIX_URL.$message['target_cover'];
+            }
             $temp->targetTitle = $message['target_title'];
             $temp->targetContent = $message['target_content'];
             $result[$key] = $temp;

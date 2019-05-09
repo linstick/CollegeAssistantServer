@@ -15,8 +15,10 @@ use app\index\model\ActivityAddition;
 use app\index\model\ActivityCollectRelation;
 use app\index\model\ActivityComment;
 use app\index\model\ActivityPictureRelation;
+use app\index\model\Message;
 use app\index\model\Topic;
 use app\index\model\User;
+use app\index\response\ActivityDynamicData;
 use app\index\response\ActivityResponseBean;
 use app\index\response\CreateActivityResultResponseBean;
 use app\index\response\Response;
@@ -134,6 +136,28 @@ class Activities
         return Response::newSuccessInstance($data);
     }
 
+    /**
+     * 获取活动动态变化的数据
+     * @return Response
+     */
+    public function fetchDynamic() {
+        $request = Request::instance();
+        $activity_id = $request->get(Config::PARAM_KEY_ACTIVITY_ID);
+        if ($activity_id == null) {
+            return Response::newIllegalInstance();
+        }
+        $temp = new ActivityDynamicData();
+        $temp->collectCount = self::getCollectCount($activity_id);
+        $temp->additionCount = self::getAdditionCount($activity_id);
+        $temp->commentCount = self::getCommentCount($activity_id);
+        return Response::newSuccessInstance($temp);
+    }
+
+    /**
+     * 创建活动接口（可能同时创建话题）
+     * @return Response
+     * @throws \think\exception\DbException
+     */
     public function create() {
         $request = Request::instance();
         $activity_json = $request->post(Config::PARAM_KEY_ACTIVITY);
@@ -210,6 +234,81 @@ class Activities
         $data->activity = self::buildSingleActivityData(Activity::get($activity->id), $activity->publisher_uid);
         $data->topic = $topic;
         return Response::newSuccessInstance($data);
+    }
+
+    /**
+     * 删除活动
+     * @return Response
+     * @throws \think\exception\DbException
+     */
+    public function delete() {
+        $request = Request::instance();
+        $activity_id = $request->get(Config::PARAM_KEY_ACTIVITY_ID);
+        $activity = Activity::get($activity_id);
+        if ($activity == null) {
+            return Response::newIllegalInstance();
+        }
+        $activity->delete();
+        return Response::newSuccessInstance($activity);
+    }
+
+    /**
+     * 活动收藏/取消收藏接口
+     */
+    public function collect() {
+        $request = Request::instance();
+        $uid = $request->get(Config::PARAM_KEY_UID);
+        $activity_id = $request->get(Config::PARAM_KEY_ACTIVITY_ID);
+        $positive = $request->get(Config::PARAM_KEY_POSITIVE);
+        if ($uid == null || $activity_id == null) {
+            return Response::newIllegalInstance();
+        }
+        $relation = ActivityCollectRelation::get([
+            ActivityCollectRelation::COLUMN_ACTIVITY_ID => $activity_id,
+            ActivityCollectRelation::COLUMN_COLLECTOR_UID => $uid
+        ]);
+        if ($positive) {
+            // 收藏操作
+            if ($relation == null) {
+                // 保存
+                $relation = new ActivityCollectRelation();
+                $relation->activity_id = $activity_id;
+                $relation->collector_uid = $uid;
+                $relation->save();
+
+                $message = Message::get([
+                    Message::COLUMN_TYPE => Config::MESSAGE_TYPE_ACTIVITY_COLLECT,
+                    Message::COLUMN_TARGET_ID => $activity_id,
+                    Message::COLUMN_CREATOR_UID => $uid
+                ]);
+                if ($message == null) {
+                    // 生成收藏消息
+                    $activity = Activity::get($activity_id);
+                    $pictureRelation = ActivityPictureRelation::get([
+                        ActivityPictureRelation::COLUMN_ACTIVITY_ID => $activity_id,
+                        ActivityPictureRelation::COLUMN_ORDER_NUMBER => 0,
+                    ]);
+                    $message = new Message();
+                    $message->type = Config::MESSAGE_TYPE_ACTIVITY_COLLECT;
+                    $message->content = Config::MESSAGE_CONTENT_ACTIVITY_COLLECT;
+                    $message->target_id = $activity->id;
+                    $message->target_title = $activity->title;
+                    $message->target_content = $activity->content;
+                    $message->receiver_uid = $activity->publisher_uid;
+                    $message->creator_uid = $uid;
+                    if ($pictureRelation != null) {
+                        $message->target_cover = $pictureRelation->getData(ActivityPictureRelation::COLUMN_URL);
+                    }
+                    $message->save();
+                }
+            }
+            return Response::newSuccessInstance(null);
+        }
+        // 取消收藏
+        if ($relation != null) {
+            $relation->delete();
+        }
+        return Response::newSuccessInstance(null);
     }
 
     private static function buildActivityListData($activities, $uid) {

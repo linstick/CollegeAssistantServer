@@ -36,6 +36,8 @@ class Config
     const STATUS_CREATE_TOPIC_FAIL = '网络异常，创建话题失败';
     const STATUS_CREATE_ACTIVITY_FAIL = '网络异常，创建活动失败';
     const STATUS_CREATE_DISCOVER_FAIL = '网络异常，创建动态失败';
+    const STATUS_IMPEACH_FAIL = '网络异常，举报失败';
+    const STATUS_FEEDBACK_FAIL = '网络异常，反馈失败';
 
     // 消息类型
     const MESSAGE_TYPE_ACTIVITY_COMMENT = 0;
@@ -50,13 +52,13 @@ class Config
     // 需要全局缓存的页面数据
     const PAGE_ID_ACTIVITY_ALL = 0;
     const PAGE_ID_ACTIVITY_ONE_KIND = 8;
-    const PAGE_ID_ACTIVITY_SELF = 9;
-    const PAGE_ID_ACTIVITY_SELF_COLLECT = 10;
-    const PAGE_ID_TOPIC_ALL = 11;
-    const PAGE_ID_TOPIC_SELF = 12;
-    const PAGE_ID_DISCOVER_ALL = 13;
-    const PAGE_ID_DISCOVER_SELF = 14;
-    const PAGE_ID_MESSAGE = 15;
+    const PAGE_ID_ACTIVITY_SELF = 12;
+    const PAGE_ID_ACTIVITY_SELF_COLLECT = 13;
+    const PAGE_ID_TOPIC_ALL = 9;
+    const PAGE_ID_TOPIC_SELF = 14;
+    const PAGE_ID_DISCOVER_ALL = 10;
+    const PAGE_ID_DISCOVER_SELF = 15;
+    const PAGE_ID_MESSAGE = 11;
     // 不需要全局缓存的页面数据
     const PAGE_ID_ACTIVITY_OTHER_USER = 16;
     const PAGE_ID_ACTIVITY_SEARCH = 17;
@@ -75,6 +77,10 @@ class Config
     const PULL_TYPE_REFRESH = 0;
     const PULL_TYPE_LOAD_MORE = 1;
 
+    // 定义评论类型
+    const COMMENT_TYPE_ACTIVITY = 0;
+    const COMMENT_TYPE_DISCOVER = 1;
+
     // 请求参数字段定义
     const PARAM_KEY_PAGE_ID = "page_id";    // 页面ID
     const PARAM_KEY_PULL_TYPE = "pull_type";    // 列表请求类型，刷新/加载更多
@@ -88,6 +94,7 @@ class Config
     const PARAM_KEY_TOPIC_NAME = "topic_name"; // 话题页中的话题id
     const PARAM_KEY_ACTIVITY_ID = "activity_id";
     const PARAM_KEY_DISCOVER_ID = "discover_id";
+    const PARAM_KEY_MESSAGE_ID = "message_id";
     const PARAM_KEY_ACCOUNT = "account";
     const PARAM_KEY_NICKNAME = "nickname";
     const PARAM_KEY_PASSWORD = "password";
@@ -101,6 +108,7 @@ class Config
     const PARAM_KEY_DISCOVER = "discover";
     const PARAM_KEY_POSITIVE = "positive";
     const PARAM_KEY_COMMENT = "comment";
+    const PARAM_KEY_COMMENT_TYPE = "comment_type";
     const PARAM_KEY_COMMENT_ID = "comment_id";
     const PARAM_KEY_ADDITION = "addition";
     const PARAM_KEY_ADDITION_ID = "addition_id";
@@ -121,4 +129,19 @@ class Config
     const MAX_REQUEST_COUNT = 30;
     // 默认列表更新请求时提供的时间
     const DEFAULT_TIME_STAMP = "1970-1-1 00:00:00";
+
+    const MESSAGE_CONTENT_ACTIVITY_COLLECT = 'TA收藏了这个活动';
+    const MESSAGE_CONTENT_DISCOVER_LIKE = 'TA赞了这个动态';
+    const MESSAGE_CONTENT_JOIN_TOPIC = 'TA参与了这个话题';
+
+    const aaa = '
+    
+    {   
+        "code": 0,
+        "status":"OK",
+        "data":"..."
+    }
+    
+    
+    ';
 }

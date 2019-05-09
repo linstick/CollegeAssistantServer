@@ -27,6 +27,7 @@ use app\index\model\User;
 use app\index\response\ActivityResponseBean;
 use app\index\response\DiscoverResponseBean;
 use app\index\response\Response;
+use app\index\response\TopicDynamicData;
 use app\index\response\TopicResponseBean;
 use think\Db;
 use think\Paginator;
@@ -107,6 +108,22 @@ class Topics
         }
         $data = self::buildSingleTopicData($topic);
         return Response::newSuccessInstance($data);
+    }
+
+    /**
+     * 获取话题中动态变化的数据
+     * @return Response
+     */
+    public function fetchDynamic() {
+        $request = Request::instance();
+        $topic_id = $request->get(Config::PARAM_KEY_TOPIC_ID);
+        if ($topic_id == null) {
+            return Response::newIllegalInstance();
+        }
+        $temp = new TopicDynamicData();
+        $temp->joinCount = self::getJoinCount($topic_id);
+        $temp->visitCount = self::getVisitCount($topic_id);
+        return Response::newSuccessInstance($temp);
     }
 
     public function fetchHotSimpleList() {
@@ -191,6 +208,42 @@ class Topics
         $topic_source->cover = $cover;
         $topic = self::createTopic($topic_source);
         return Response::newSuccessInstance($topic);
+    }
+
+    /**
+     * 删除话题
+     * @return Response
+     * @throws \think\exception\DbException
+     */
+    public function delete() {
+        $request = Request::instance();
+        $topic_id = $request->get(Config::PARAM_KEY_TOPIC_ID);
+        $topic = Topic::get($topic_id);
+        if ($topic == null) {
+            return Response::newIllegalInstance();
+        }
+        $topic->delete();
+        return Response::newSuccessInstance($topic);
+    }
+
+    public function visit() {
+        $request = Request::instance();
+        $uid = $request->get(Config::PARAM_KEY_UID);
+        $topic_id = $request->get(Config::PARAM_KEY_TOPIC_ID);
+        if ($uid == null || $topic_id == null) {
+            return Response::newIllegalInstance();
+        }
+        $relation = TopicVisitRelation::get([
+            TopicVisitRelation::COLUMN_TOPIC_ID => $topic_id,
+            TopicVisitRelation::COLUMN_VISITOR_UID => $uid
+        ]);
+        if ($relation == null) {
+            $relation = new TopicVisitRelation();
+            $relation->topic_id = $topic_id;
+            $relation->visitor_uid = $uid;
+            $relation->save();
+        }
+        return Response::newSuccessInstance(null);
     }
 
     public static function checkNameExists($name) {
@@ -283,7 +336,7 @@ class Topics
         $temp = new TopicResponseBean();
         $temp->id = $topic->id;
         $temp->name = $topic->name;
-        $temp->coverUrl = $topic->cover;
+        $temp->cover = $topic->cover;
         $temp->introduction = $topic->description;
         $temp->publishTime = $topic->publish_time;
         $temp->joinCount = self::getJoinCount($topic->id);

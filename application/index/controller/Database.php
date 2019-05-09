@@ -41,7 +41,7 @@ class Database
 //        Database::createActivityAdditionData();
 //        Database::createTopicVisitData();
 //                Database::createActivityCollectData();
-                Database::createDiscoverLikeData();
+//                Database::createDiscoverLikeData();
 
 
 
@@ -164,7 +164,7 @@ class Database
                 $message->receiver_uid = $activity->publisher_uid;
                 $message->creator_uid = $comment->publisher_uid;
                 if ($pictureRelation != null) {
-                    $message->target_cover = $pictureRelation->url;
+                    $message->target_cover = $pictureRelation->getData(ActivityPictureRelation::COLUMN_URL);
                 }
                 $message->save();
             }
@@ -213,7 +213,7 @@ class Database
                 $message->receiver_uid = $activity->publisher_uid;
                 $message->creator_uid = $collectRelation->collector_uid;
                 if ($pictureRelation != null) {
-                    $message->target_cover = $pictureRelation->url;
+                    $message->target_cover = $pictureRelation->getData(ActivityPictureRelation::COLUMN_URL);
                 }
                 $message->save();
             }
@@ -246,7 +246,7 @@ class Database
                 $message->target_content = $topic->description;
                 $message->receiver_uid = $topic->publisher_uid;
                 $message->creator_uid = $discover->publisher_uid;
-                $message->target_cover = $topic->cover;
+                $message->target_cover = $topic->getData(Topic::COLUMN_COVER);
                 $message->save();
 
                 $joinRelation = new TopicJoinRelation();
@@ -298,7 +298,7 @@ class Database
                 $message->receiver_uid = $discover->publisher_uid;
                 $message->creator_uid = $comment->publisher_uid;
                 if ($pictureRelation != null) {
-                    $message->target_cover = $pictureRelation->url;
+                    $message->target_cover = $pictureRelation->getData(DiscoverPictureRelation::COLUMN_URL);
                 }
                 $message->save();
             }
@@ -331,7 +331,7 @@ class Database
                 $message->receiver_uid = $discover->publisher_uid;
                 $message->creator_uid = $likeRelation->liker_uid;
                 if ($pictureRelation != null) {
-                    $message->target_cover = $pictureRelation->url;
+                    $message->target_cover = $pictureRelation->getData(DiscoverPictureRelation::COLUMN_URL);
                 }
                 $message->save();
             }

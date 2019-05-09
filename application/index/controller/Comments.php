@@ -77,6 +77,131 @@ class Comments
         return Response::newSuccessInstance($data);
     }
 
+    /**
+     * 添加评论（活动/动态）
+     */
+    public function add() {
+        $request = Request::instance();
+        $uid = $request->post(Config::PARAM_KEY_UID);
+        $comment_type = $request->post(Config::PARAM_KEY_COMMENT_TYPE);
+        $target_id = $comment_type == Config::COMMENT_TYPE_ACTIVITY
+            ? $request->post(Config::PARAM_KEY_ACTIVITY_ID)
+            : $request->post(Config::PARAM_KEY_DISCOVER_ID);
+        $text = $request->post(Config::PARAM_KEY_COMMENT);
+        if ($uid == null || $target_id == null || $text == null || $comment_type == null) {
+            return Response::newIllegalInstance();
+        }
+        $comment = null;
+        switch ($comment_type) {
+            case Config::COMMENT_TYPE_ACTIVITY:
+                $comment = new ActivityComment();
+                $comment->content = $text;
+                $comment->publisher_uid = $uid;
+                $comment->activity_id = $target_id;
+                $comment->save();
+                $comment = ActivityComment::get($comment->id);
+
+                $message = Message::get([
+                    Message::COLUMN_TYPE => Config::MESSAGE_TYPE_ACTIVITY_COMMENT,
+                    Message::COLUMN_TARGET_ID => $target_id,
+                    Message::COLUMN_CREATOR_UID => $uid
+                ]);
+                if ($message == null) {
+                    // 生成评论消息
+                    $discover = Activity::get($target_id);
+                    $pictureRelation = ActivityPictureRelation::get([
+                        ActivityPictureRelation::COLUMN_ACTIVITY_ID => $target_id,
+                        ActivityPictureRelation::COLUMN_ORDER_NUMBER => 0,
+                    ]);
+                    $message = new Message();
+                    $message->type = Config::MESSAGE_TYPE_ACTIVITY_COMMENT;
+                    $message->content = $text;
+                    $message->target_id = $discover->id;
+                    $message->target_title = $discover->title;
+                    $message->target_content = $discover->content;
+                    $message->receiver_uid = $discover->publisher_uid;
+                    $message->creator_uid = $uid;
+                    if ($pictureRelation != null) {
+                        $message->target_cover = $pictureRelation->getData(ActivityPictureRelation::COLUMN_URL);
+                    }
+                    $message->save();
+                }
+                break;
+            case Config::COMMENT_TYPE_DISCOVER:
+                $comment = new DiscoverComment();
+                $comment->content = $text;
+                $comment->publisher_uid = $uid;
+                $comment->discover_id = $target_id;
+                $comment->save();
+                $comment = DiscoverComment::get($comment->id);
+
+                $message = Message::get([
+                    Message::COLUMN_TYPE => Config::MESSAGE_TYPE_DISCOVER_COMMENT,
+                    Message::COLUMN_TARGET_ID => $target_id,
+                    Message::COLUMN_CREATOR_UID => $uid
+                ]);
+                if ($message == null) {
+                    // 生成评论消息
+                    $discover = Discover::get($target_id);
+                    $pictureRelation = DiscoverPictureRelation::get([
+                        DiscoverPictureRelation::COLUMN_DISCOVER_ID => $target_id,
+                        DiscoverPictureRelation::COLUMN_ORDER_NUMBER => 0,
+                    ]);
+                    $message = new Message();
+                    $message->type = Config::MESSAGE_TYPE_DISCOVER_COMMENT;
+                    $message->content = $text;
+                    $message->target_id = $discover->id;
+                    $message->target_content = $discover->content;
+                    $message->receiver_uid = $discover->publisher_uid;
+                    $message->creator_uid = $uid;
+                    if ($pictureRelation != null) {
+                        $message->target_cover = $pictureRelation->getData(DiscoverPictureRelation::COLUMN_URL);
+                    }
+                    $message->save();
+                }
+                break;
+            default:
+                break;
+        }
+        if ($comment == null) {
+            return Response::newIllegalInstance();
+        }
+        $data = self::buildSingleCommentData($comment);
+        return Response::newSuccessInstance($data);
+    }
+
+    /**
+     * 删除评论（活动/动态）
+     */
+    public function delete() {
+        $request = Request::instance();
+        $comment_id = $request->get(Config::PARAM_KEY_COMMENT_ID);
+        $comment_type = $request->get(Config::PARAM_KEY_COMMENT_TYPE);
+        if ($comment_id == null || $comment_type == null) {
+            return Response::newIllegalInstance();
+        }
+        $comment = null;
+        switch ($comment_type) {
+            case Config::COMMENT_TYPE_ACTIVITY:
+                $comment = ActivityComment::get($comment_id);
+                if ($comment == null) {
+                    return Response::newIllegalInstance();
+                }
+                $comment->delete();
+                break;
+            case Config::COMMENT_TYPE_DISCOVER:
+                $comment = DiscoverComment::get($comment_id);
+                if ($comment == null) {
+                    return Response::newIllegalInstance();
+                }
+                $comment->delete();
+                break;
+            default:
+                break;
+        }
+        return Response::newSuccessInstance($comment);
+    }
+
     private static function buildCommentListData($comments) {
         // 组装数据返回
         $result = array();
@@ -93,6 +218,19 @@ class Comments
             $temp->avatarUrl = $user->avatar;
         }
         return $result;
+    }
+
+    private static function buildSingleCommentData($comment) {
+        $temp = new CommentResponseBean();
+        $temp->id = $comment->id;
+        $temp->content = $comment->content;
+        $temp->publishTime = $comment->publish_time;
+        // 获取用户的基本数据
+        $user = User::get($comment->publisher_uid);
+        $temp->uid = $user->uid;
+        $temp->nickname = $user->nickname;
+        $temp->avatarUrl = $user->avatar;
+        return $temp;
     }
 
 }

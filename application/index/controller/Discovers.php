@@ -20,11 +20,13 @@ use app\index\model\Discover;
 use app\index\model\DiscoverComment;
 use app\index\model\DiscoverLikeRelation;
 use app\index\model\DiscoverPictureRelation;
+use app\index\model\Message;
 use app\index\model\Topic;
 use app\index\model\TopicJoinRelation;
 use app\index\model\User;
 use app\index\response\ActivityResponseBean;
 use app\index\response\CreateDiscoverResultResponseBean;
+use app\index\response\DiscoverDynamicData;
 use app\index\response\DiscoverResponseBean;
 use app\index\response\Response;
 use think\Db;
@@ -153,6 +155,22 @@ class Discovers
     }
 
     /**
+     * 获取动态中动态变化的数据
+     * @return Response
+     */
+    public function fetchDynamic() {
+        $request = Request::instance();
+        $discover_id = $request->get(Config::PARAM_KEY_DISCOVER_ID);
+        if ($discover_id == null) {
+            return Response::newIllegalInstance();
+        }
+        $temp = new DiscoverDynamicData();
+        $temp->likeCount = self::getLikeCount($discover_id);
+        $temp->commentCount = self::getCommentCount($discover_id);
+        return Response::newSuccessInstance($temp);
+    }
+
+    /**
      * 创建动态（可能会同时创建话题）
      * @return Response
      * @throws \think\exception\DbException
@@ -223,10 +241,104 @@ class Discovers
             $relation->order_number = $key;
             $relation->save();
         }
+        if ($topic == null && $discover->related_topic_id != null) {
+            // 添加参与话题信息
+            $target_topic = Topic::get($discover->related_topic_id);
+            $message = new Message();
+            $message->type = Config::MESSAGE_TYPE_TOPIC_JOIN;
+            $message->content = Config::MESSAGE_CONTENT_JOIN_TOPIC;
+            $message->target_id = $target_topic->id;
+            $topic_name = $target_topic->name;
+            $message->target_title = '#'.$topic_name.'#';
+            $message->target_content = $target_topic->description;
+            $message->receiver_uid = $target_topic->publisher_uid;
+            $message->creator_uid = $discover->publisher_uid;
+            $message->target_cover = $target_topic->getData(Topic::COLUMN_COVER);
+            $message->save();
+            // 添加话题参与关系
+            $joinRelation = new TopicJoinRelation();
+            $joinRelation->topic_id = $target_topic->id;
+            $joinRelation->discover_id = $discover->id;
+            $joinRelation->save();
+        }
         $data = new CreateDiscoverResultResponseBean();
         $data->discover = self::buildSingleDiscoverData(Discover::get($discover->id), $discover->publisher_uid);
         $data->topic = $topic;
         return Response::newSuccessInstance($data);
+    }
+
+    /**
+     * 删除动态
+     * @return Response
+     * @throws \think\exception\DbException
+     */
+    public function delete() {
+        $request = Request::instance();
+        $discover_id = $request->get(Config::PARAM_KEY_DISCOVER_ID);
+        $discover = Discover::get($discover_id);
+        if ($discover == null) {
+            return Response::newIllegalInstance();
+        }
+        $discover->delete();
+        return Response::newSuccessInstance($discover);
+    }
+
+    /**
+     * 点赞动态
+     */
+    public function like() {
+        $request = Request::instance();
+        $uid = $request->get(Config::PARAM_KEY_UID);
+        $discover_id = $request->get(Config::PARAM_KEY_DISCOVER_ID);
+        $positive = $request->get(Config::PARAM_KEY_POSITIVE);
+        if ($uid == null || $discover_id == null) {
+            return Response::newIllegalInstance();
+        }
+        $relation = DiscoverLikeRelation::get([
+            DiscoverLikeRelation::COLUMN_DISCOVER_ID => $discover_id,
+            DiscoverLikeRelation::COLUMN_LIKER_UID => $uid
+        ]);
+        if ($positive) {
+            // 收藏操作
+            if ($relation == null) {
+                // 保存
+                $relation = new DiscoverLikeRelation();
+                $relation->discover_id = $discover_id;
+                $relation->liker_uid = $uid;
+                $relation->save();
+
+                $message = Message::get([
+                    Message::COLUMN_TYPE => Config::MESSAGE_TYPE_DISCOVER_LIKE,
+                    Message::COLUMN_TARGET_ID => $discover_id,
+                    Message::COLUMN_CREATOR_UID => $uid
+                ]);
+                if ($message == null) {
+                    // 生成点赞消息
+                    $discover = Discover::get($discover_id);
+                    $pictureRelation = DiscoverPictureRelation::get([
+                        DiscoverPictureRelation::COLUMN_DISCOVER_ID => $discover_id,
+                        DiscoverPictureRelation::COLUMN_ORDER_NUMBER => 0,
+                    ]);
+                    $message = new Message();
+                    $message->type = Config::MESSAGE_TYPE_DISCOVER_LIKE;
+                    $message->content = Config::MESSAGE_CONTENT_DISCOVER_LIKE;
+                    $message->target_id = $discover->id;
+                    $message->target_content = $discover->content;
+                    $message->receiver_uid = $discover->publisher_uid;
+                    $message->creator_uid = $uid;
+                    if ($pictureRelation != null) {
+                        $message->target_cover = $pictureRelation->getData(DiscoverPictureRelation::COLUMN_URL);
+                    }
+                    $message->save();
+                }
+            }
+            return Response::newSuccessInstance(null);
+        }
+        // 取消点赞
+        if ($relation != null) {
+            $relation->delete();
+        }
+        return Response::newSuccessInstance(null);
     }
 
     public static function search($keyword, $offset, $request_count) {
