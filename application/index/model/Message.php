@@ -32,4 +32,8 @@ class Message extends Model
         }
         return Config::IMAGE_PREFIX_URL.$value;
     }
+
+    public function getCreateTimeAttr($time) {
+        return $time;
+    }
 }

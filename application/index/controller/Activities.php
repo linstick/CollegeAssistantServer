@@ -40,9 +40,10 @@ class Activities
         $request = Request::instance();
         $page_id = $request->get(Config::PARAM_KEY_PAGE_ID);
         $pull_type = $request->get(Config::PARAM_KEY_PULL_TYPE);
-        $time_opt = $pull_type == Config::PULL_TYPE_REFRESH ? '>' : '<';
+        $compare_opt = $pull_type == Config::PULL_TYPE_REFRESH ? '>' : '<';
         $request_count = $request->get(Config::PARAM_KEY_REQUEST_COUNT);
         $time_stamp = $request->get(Config::PARAM_KEY_TIME_STAMP);
+        $first_or_last_id = $request->get(Config::PARAM_KEY_ACTIVITY_ID);
         $uid = $request->get(Config::PARAM_KEY_UID);
         $activities = null;
         if ($page_id == Config::PAGE_ID_ACTIVITY_SELF_COLLECT) {
@@ -51,7 +52,7 @@ class Activities
             $activities = Db::view(ActivityCollectRelation::TABLE_NAME, ActivityCollectRelation::COLUMN_COLLECTOR_UID)
                 ->view(Activity::TABLE_NAME, '*', $view_join_condition)
                 ->where(ActivityCollectRelation::COLUMN_COLLECTOR_UID, $uid)
-                ->where(ActivityCollectRelation::COLUMN_CREATE_TIME, $time_opt, $time_stamp)
+                ->where(ActivityCollectRelation::COLUMN_CREATE_TIME, $compare_opt, $time_stamp)
                 ->order(ActivityCollectRelation::COLUMN_CREATE_TIME, Config::WORD_DESC)
                 ->limit($request_count)
                 ->select();
@@ -60,8 +61,8 @@ class Activities
             $type = $request->get(Config::PARAM_KEY_TYPE);
             $activities = Db::table(Activity::TABLE_NAME)
                 ->where(Activity::COLUMN_TYPE, $type)
-                ->where(Activity::COLUMN_PUBLISH_TIME, $time_opt, $time_stamp)
-                ->order(Activity::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
+                ->where(Activity::COLUMN_ID, $compare_opt, $first_or_last_id)
+                ->order(Activity::COLUMN_ID, Config::WORD_DESC)
                 ->limit($request_count)
                 ->select();
         } else {
@@ -69,8 +70,8 @@ class Activities
                 case Config::PAGE_ID_ACTIVITY_ALL:
                     // 全部活动查询
                     $activities = Db::table(Activity::TABLE_NAME)
-                        ->where(Activity::COLUMN_PUBLISH_TIME, $time_opt, $time_stamp)
-                        ->order(Activity::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
+                        ->where(Activity::COLUMN_ID, $compare_opt, $first_or_last_id)
+                        ->order(Activity::COLUMN_ID, Config::WORD_DESC)
                         ->limit($request_count)
                         ->select();
                     break;
@@ -78,8 +79,8 @@ class Activities
                     // 用户自己的活动查询
                     $activities = Db::table(Activity::TABLE_NAME)
                         ->where(Activity::COLUMN_PUBLISHER_UID, $uid)
-                        ->where(Activity::COLUMN_PUBLISH_TIME, $time_opt, $time_stamp)
-                        ->order(Activity::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
+                        ->where(Activity::COLUMN_ID, $compare_opt, $first_or_last_id)
+                        ->order(Activity::COLUMN_ID, Config::WORD_DESC)
                         ->limit($request_count)
                         ->select();
                     break;
@@ -88,8 +89,8 @@ class Activities
                     $other_uid = $request->get(Config::PARAM_KEY_OTHER_UID);
                     $activities = Db::table(Activity::TABLE_NAME)
                         ->where(Activity::COLUMN_PUBLISHER_UID, $other_uid)
-                        ->where(Activity::COLUMN_PUBLISH_TIME, $time_opt, $time_stamp)
-                        ->order(Activity::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
+                        ->where(Activity::COLUMN_ID, $compare_opt, $first_or_last_id)
+                        ->order(Activity::COLUMN_ID, Config::WORD_DESC)
                         ->limit($request_count)
                         ->select();
                     break;
@@ -111,12 +112,6 @@ class Activities
             return Response::newIllegalInstance();
         }
         if ($activities->isEmpty()){
-            if ($pull_type == Config::PULL_TYPE_REFRESH && strcmp($time_stamp, Config::DEFAULT_TIME_STAMP) == 0) {
-                // 第一次请求
-                return Response::newNoDataInstance();
-            }
-            // 非第一次请求
-            // 无更多数据数据
             return Response::newEmptyInstance();
         }
         $data = Activities::buildActivityListData($activities, $uid);
@@ -392,7 +387,7 @@ class Activities
         $condition = "%$keyword%";
         $activities = Db::table(Activity::TABLE_NAME)
             ->where($field,Config::WORD_LIKE,  $condition)
-            ->order(Activity::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
+            ->order(Activity::COLUMN_ID, Config::WORD_DESC)
             ->limit($offset, $request_count)
             ->select();
         return $activities;
@@ -414,7 +409,7 @@ class Activities
         $field = Activity::COLUMN_TITLE;
         $condition = "%$keyword%";
         $activities = Activity::where($field,Config::WORD_LIKE,  $condition)
-            ->order(Activity::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
+            ->order(Activity::COLUMN_ID, Config::WORD_DESC)
             ->field(Activity::COLUMN_ID.','.Activity::COLUMN_TITLE)
             ->limit($request_count)
             ->select();

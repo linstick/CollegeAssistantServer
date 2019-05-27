@@ -41,16 +41,16 @@ class Additions
         $request = Request::instance();
         $page_id = $request->get(Config::PARAM_KEY_PAGE_ID);
         $pull_type = $request->get(Config::PARAM_KEY_PULL_TYPE);
-        $time_opt = $pull_type == Config::PULL_TYPE_REFRESH ? '>' : '<';
+        $compare_opt = $pull_type == Config::PULL_TYPE_REFRESH ? '>' : '<';
         $request_count = $request->get(Config::PARAM_KEY_REQUEST_COUNT);
-        $time_stamp = $request->get(Config::PARAM_KEY_TIME_STAMP);
+        $first_or_last_id = $request->get(Config::PARAM_KEY_ADDITION_ID);
         $activity_id = $request->get(Config::PARAM_KEY_ACTIVITY_ID);
         $additions = null;
         if ($page_id == Config::PAGE_ID_ACTIVITY_ADDITION) {
             $additions = Db::table(ActivityAddition::TABLE_NAME)
                 ->where(ActivityAddition::COLUMN_ACTIVITY_ID, $activity_id)
-                ->where(ActivityAddition::COLUMN_PUBLISH_TIME, $time_opt, $time_stamp)
-                ->order(ActivityAddition::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
+                ->where(ActivityAddition::COLUMN_ID, $compare_opt, $first_or_last_id)
+                ->order(ActivityAddition::COLUMN_ID, Config::WORD_DESC)
                 ->limit($request_count)
                 ->select();
         }
@@ -58,7 +58,7 @@ class Additions
             return Response::newIllegalInstance();;
         }
         if ($additions->isEmpty()){
-            if ($pull_type == Config::PULL_TYPE_REFRESH && strcmp($time_stamp, Config::DEFAULT_TIME_STAMP) == 0) {
+            if ($pull_type == Config::PULL_TYPE_REFRESH && strcmp($first_or_last_id, Config::DEFAULT_TIME_STAMP) == 0) {
                 // 第一次请求
                 return Response::newNoDataInstance();
             }

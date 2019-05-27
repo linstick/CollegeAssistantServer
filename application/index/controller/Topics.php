@@ -42,22 +42,22 @@ class Topics
         $pull_type = $request->get(Config::PARAM_KEY_PULL_TYPE);
         $time_opt = $pull_type == Config::PULL_TYPE_REFRESH ? '>' : '<';
         $request_count = $request->get(Config::PARAM_KEY_REQUEST_COUNT);
-        $time_stamp = $request->get(Config::PARAM_KEY_TIME_STAMP);
+        $first_or_last_id = $request->get(Config::PARAM_KEY_TOPIC_ID);
         $uid = $request->get(Config::PARAM_KEY_UID);
         $topics = null;
         switch ($page_id) {
             case Config::PAGE_ID_TOPIC_ALL:
                 // 全部话题查询
-                $topics =  Topic::where(Topic::COLUMN_PUBLISH_TIME, $time_opt, $time_stamp)
-                    ->order(Topic::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
+                $topics =  Topic::where(Topic::COLUMN_ID, $time_opt, $first_or_last_id)
+                    ->order(Topic::COLUMN_ID, Config::WORD_DESC)
                     ->limit($request_count)
                     ->select();
                 break;
             case Config::PAGE_ID_TOPIC_SELF:
                 // 用户自己的话题查询
                 $topics =  Topic::where(Topic::COLUMN_PUBLISHER_UID, $uid)
-                    ->where(Topic::COLUMN_PUBLISH_TIME, $time_opt, $time_stamp)
-                    ->order(Topic::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
+                    ->where(Topic::COLUMN_ID, $time_opt, $first_or_last_id)
+                    ->order(Topic::COLUMN_ID, Config::WORD_DESC)
                     ->limit($request_count)
                     ->select();
                 break;
@@ -65,8 +65,8 @@ class Topics
                 // 其他用户的话题查询
                 $other_uid = $request->get(Config::PARAM_KEY_OTHER_UID);
                 $topics = Topic::where(Topic::COLUMN_PUBLISHER_UID, $other_uid)
-                    ->where(Topic::COLUMN_PUBLISH_TIME, $time_opt, $time_stamp)
-                    ->order(Topic::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
+                    ->where(Topic::COLUMN_ID, $time_opt, $first_or_last_id)
+                    ->order(Topic::COLUMN_ID, Config::WORD_DESC)
                     ->limit($request_count)
                     ->select();
                 break;
@@ -86,12 +86,6 @@ class Topics
             return Response::newIllegalInstance();
         }
         if ($topics->isEmpty()){
-            if ($pull_type == Config::PULL_TYPE_REFRESH && strcmp($time_stamp, Config::DEFAULT_TIME_STAMP) == 0) {
-                // 第一次请求
-                return Response::newNoDataInstance();
-            }
-            // 非第一次请求
-            // 无更多数据数据
             return Response::newEmptyInstance();
         }
         $data = self::buildTopicListData($topics);
@@ -268,7 +262,7 @@ class Topics
         $field = Topic::COLUMN_NAME.'|'.Topic::COLUMN_DESCRIPTION;
         $condition = "%$keyword%";
         $topics = Topic::where($field,Config::WORD_LIKE,  $condition)
-            ->order(Topic::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
+            ->order(Topic::COLUMN_ID, Config::WORD_DESC)
             ->limit($offset, $request_count)
             ->select();
         return $topics;
@@ -290,7 +284,7 @@ class Topics
         $field = Topic::COLUMN_NAME;
         $condition = "%$keyword%";
         $topics = Topic::where($field,Config::WORD_LIKE,  $condition)
-            ->order(Topic::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
+            ->order(Topic::COLUMN_ID, Config::WORD_DESC)
             ->field(Topic::COLUMN_ID.','.Topic::COLUMN_NAME)
             ->limit($request_count)
             ->select();
@@ -396,7 +390,7 @@ class Topics
     }
 
     private static function getHotDiscoverList($topic_id) {
-        $request_count = 5;
+        $request_count = 3;
         return Db::table('discover d')
             ->join('discover_comment c', 'd.id=c.discover_id', 'left')
             ->where('d.id', 'in', function ($query) use ($topic_id) {

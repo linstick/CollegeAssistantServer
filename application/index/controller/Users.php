@@ -241,6 +241,7 @@ class Users
         $origin_user->nickname = $user->nickname;
         $origin_user->age = $user->age;
         $origin_user->gender = $user->gender;
+        $origin_user->email = $user->email;
         $origin_user->description = $user->description;
         if ($avatar != null) {
             $origin_user->avatar = $avatar;
@@ -261,7 +262,7 @@ class Users
     }
 
     public static function search($keyword, $offset, $request_count) {
-        $field = User::COLUMN_ID.'|'.User::COLUMN_NICKNAME;
+        $field = User::COLUMN_DESCRIPTION.'|'.User::COLUMN_NICKNAME;
         $condition = "%$keyword%";
         $users = User::where($field, Config::WORD_LIKE, $condition)
             ->field(User::COLUMN_ID.','.User::COLUMN_UID.','.User::COLUMN_NICKNAME.','.User::COLUMN_DESCRIPTION.','.User::COLUMN_AVATAR)

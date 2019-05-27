@@ -39,16 +39,16 @@ class Messages
         $request = Request::instance();
         $page_id = $request->get(Config::PARAM_KEY_PAGE_ID);
         $pull_type = $request->get(Config::PARAM_KEY_PULL_TYPE);
-        $time_opt = $pull_type == Config::PULL_TYPE_REFRESH ? '>' : '<';
+        $compare_opt = $pull_type == Config::PULL_TYPE_REFRESH ? '>' : '<';
         $request_count = $request->get(Config::PARAM_KEY_REQUEST_COUNT);
-        $time_stamp = $request->get(Config::PARAM_KEY_TIME_STAMP);
+        $first_or_last_id = $request->get(Config::PARAM_KEY_MESSAGE_ID);
         $uid = $request->get(Config::PARAM_KEY_UID);
         $messages = null;
         if ($page_id == Config::PAGE_ID_MESSAGE) {
             $messages = Db::table(Message::TABLE_NAME)
                 ->where(Message::COLUMN_RECEIVER_UID, $uid)
-                ->where(Message::COLUMN_CREATE_TIME, $time_opt, $time_stamp)
-                ->order(Message::COLUMN_CREATE_TIME, Config::WORD_DESC)
+                ->where(Message::COLUMN_ID, $compare_opt, $first_or_last_id)
+                ->order(Message::COLUMN_ID, Config::WORD_DESC)
                 ->limit($request_count)
                 ->select();
         }
@@ -56,12 +56,6 @@ class Messages
             return Response::newIllegalInstance();
         }
         if ($messages->isEmpty()){
-            if ($pull_type == Config::PULL_TYPE_REFRESH && strcmp($time_stamp, Config::DEFAULT_TIME_STAMP) == 0) {
-                // 第一次请求
-                return Response::newNoDataInstance();
-            }
-            // 非第一次请求
-            // 无更多数据数据
             return Response::newEmptyInstance();
         }
         $data = self::buildActivityListData($messages);

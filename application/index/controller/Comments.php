@@ -40,24 +40,24 @@ class Comments
         $request = Request::instance();
         $page_id = $request->get(Config::PARAM_KEY_PAGE_ID);
         $pull_type = $request->get(Config::PARAM_KEY_PULL_TYPE);
-        $time_opt = $pull_type == Config::PULL_TYPE_REFRESH ? '>' : '<';
+        $compare_opt = $pull_type == Config::PULL_TYPE_REFRESH ? '>' : '<';
         $request_count = $request->get(Config::PARAM_KEY_REQUEST_COUNT);
-        $time_stamp = $request->get(Config::PARAM_KEY_TIME_STAMP);
+        $first_or_last_id = $request->get(Config::PARAM_KEY_COMMENT_ID);
         $comments = null;
         if ($page_id == Config::PAGE_ID_ACTIVITY_COMMENT) {
             $activity_id = $request->get(Config::PARAM_KEY_ACTIVITY_ID);
             $comments = Db::table(ActivityComment::TABLE_NAME)
                 ->where(ActivityComment::COLUMN_ACTIVITY_ID, $activity_id)
-                ->where(ActivityComment::COLUMN_PUBLISH_TIME, $time_opt, $time_stamp)
-                ->order(ActivityComment::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
+                ->where(ActivityComment::COLUMN_ID, $compare_opt, $first_or_last_id)
+                ->order(ActivityComment::COLUMN_ID, Config::WORD_DESC)
                 ->limit($request_count)
                 ->select();
         } else if ($page_id == Config::PAGE_ID_DISCOVER_COMMENT) {
             $discover_id = $request->get(Config::PARAM_KEY_DISCOVER_ID);
             $comments = Db::table(DiscoverComment::TABLE_NAME)
                 ->where(DiscoverComment::COLUMN_DISCOVER_ID, $discover_id)
-                ->where(DiscoverComment::COLUMN_PUBLISH_TIME, $time_opt, $time_stamp)
-                ->order(DiscoverComment::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
+                ->where(DiscoverComment::COLUMN_ID, $compare_opt, $first_or_last_id)
+                ->order(DiscoverComment::COLUMN_ID, Config::WORD_DESC)
                 ->limit($request_count)
                 ->select();
         }
@@ -65,7 +65,7 @@ class Comments
             return Response::newIllegalInstance();;
         }
         if ($comments->isEmpty()){
-            if ($pull_type == Config::PULL_TYPE_REFRESH && strcmp($time_stamp, Config::DEFAULT_TIME_STAMP) == 0) {
+            if ($pull_type == Config::PULL_TYPE_REFRESH && strcmp($first_or_last_id, Config::DEFAULT_TIME_STAMP) == 0) {
                 // 第一次请求
                 return Response::newNoDataInstance();
             }

@@ -54,9 +54,9 @@ class Discovers
         $request = Request::instance();
         $page_id = $request->get(Config::PARAM_KEY_PAGE_ID);
         $pull_type = $request->get(Config::PARAM_KEY_PULL_TYPE);
-        $time_opt = $pull_type == Config::PULL_TYPE_REFRESH ? '>' : '<';
+        $compare_opt = $pull_type == Config::PULL_TYPE_REFRESH ? '>' : '<';
         $request_count = $request->get(Config::PARAM_KEY_REQUEST_COUNT);
-        $time_stamp = $request->get(Config::PARAM_KEY_TIME_STAMP);
+        $first_or_last_id = $request->get(Config::PARAM_KEY_DISCOVER_ID);
         $uid = $request->get(Config::PARAM_KEY_UID);
         $offset = $request->get(Config::PARAM_KEY_OFFSET);
         $discovers = null;
@@ -64,8 +64,8 @@ class Discovers
             case Config::PAGE_ID_DISCOVER_ALL:
                 // 全部活动查询
                 $discovers = Db::table(Discover::TABLE_NAME)
-                    ->where(Discover::COLUMN_PUBLISH_TIME, $time_opt, $time_stamp)
-                    ->order(Discover::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
+                    ->where(Discover::COLUMN_ID, $compare_opt, $first_or_last_id)
+                    ->order(Discover::COLUMN_ID, Config::WORD_DESC)
                     ->limit($request_count)
                     ->select();
                 break;
@@ -73,8 +73,8 @@ class Discovers
                 // 用户自己的活动查询
                 $discovers = Db::table(Discover::TABLE_NAME)
                     ->where(Discover::COLUMN_PUBLISHER_UID, $uid)
-                    ->where(Discover::COLUMN_PUBLISH_TIME, $time_opt, $time_stamp)
-                    ->order(Discover::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
+                    ->where(Discover::COLUMN_ID, $compare_opt, $first_or_last_id)
+                    ->order(Discover::COLUMN_ID, Config::WORD_DESC)
                     ->limit($request_count)
                     ->select();
                 break;
@@ -83,8 +83,8 @@ class Discovers
                 $other_uid = $request->get(Config::PARAM_KEY_OTHER_UID);
                 $discovers = Db::table(Discover::TABLE_NAME)
                     ->where(Discover::COLUMN_PUBLISHER_UID, $other_uid)
-                    ->where(Discover::COLUMN_PUBLISH_TIME, $time_opt, $time_stamp)
-                    ->order(Discover::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
+                    ->where(Discover::COLUMN_ID, $compare_opt, $first_or_last_id)
+                    ->order(Discover::COLUMN_ID, Config::WORD_DESC)
                     ->limit($request_count)
                     ->select();
                 break;
@@ -104,8 +104,8 @@ class Discovers
                 $discovers = Db::view(TopicJoinRelation::TABLE_NAME, TopicJoinRelation::COLUMN_DISCOVER_ID)
                     ->view(Discover::TABLE_NAME, '*', $view_join_condition)
                     ->where(TopicJoinRelation::COLUMN_TOPIC_ID, $topic_id)
-                    ->where(Discover::TABLE_NAME.'.'.Discover::COLUMN_PUBLISH_TIME, $time_opt, $time_stamp)
-                    ->order(Discover::COLUMN_PUBLISH_TIME, Config::WORD_DESC)
+                    ->where(Discover::TABLE_NAME.'.'.Discover::COLUMN_ID, $compare_opt, $first_or_last_id)
+                    ->order(Discover::COLUMN_ID, Config::WORD_DESC)
                     ->limit($request_count)
                     ->select();
                 break;
@@ -129,12 +129,6 @@ class Discovers
             return Response::newIllegalInstance();
         }
         if ($discovers->isEmpty()){
-            if ($pull_type == Config::PULL_TYPE_REFRESH && strcmp($time_stamp, Config::DEFAULT_TIME_STAMP) == 0) {
-                // 第一次请求
-                return Response::newNoDataInstance();
-            }
-            // 非第一次请求
-            // 无更多数据数据
             return Response::newEmptyInstance();
         }
         $data = self::buildDiscoverListData($discovers, $uid);
@@ -221,14 +215,18 @@ class Discovers
         if ($topic_source != null) {
             $topic = Topics::createTopic($topic_source);
         }
-        // 创建活动
+        $related_topic_id = null;
+        // 创建动态
         $discover_source = json_decode($discover_json);
+        if ($topic != null) {
+            $related_topic_id = $topic->id;
+        } else if ($discover_source->topicId != null){
+            $related_topic_id = $discover_source->topicId;
+        }
         $discover = new Discover();
         $discover->content = $discover_source->content;
-        if ($topic != null) {
-            $discover->related_topic_id = $topic->id;
-        } else if ($discover_source->topicId != null){
-            $discover->related_topic_id = $discover_source->topicId;
+        if ($related_topic_id != null) {
+            $discover->related_topic_id = $related_topic_id;
         }
         $discover->location = $discover_source->location;
         $discover->publisher_uid = $discover_source->uid;
@@ -241,9 +239,9 @@ class Discovers
             $relation->order_number = $key;
             $relation->save();
         }
-        if ($topic == null && $discover->related_topic_id != null) {
+        if ($related_topic_id != null) {
             // 添加参与话题信息
-            $target_topic = Topic::get($discover->related_topic_id);
+            $target_topic = Topic::get($related_topic_id);
             $message = new Message();
             $message->type = Config::MESSAGE_TYPE_TOPIC_JOIN;
             $message->content = Config::MESSAGE_CONTENT_JOIN_TOPIC;
