@@ -140,26 +140,22 @@ class Topics
         $request = Request::instance();
         $keyword = $request->get(Config::PARAM_KEY_KEYWORD);
         $request_count = $request->get(Config::PARAM_KEY_REQUEST_COUNT);
-        $page = $request->get(Config::PARAM_KEY_REQUEST_COUNT);
         if ($keyword == null) {
             return Response::newIllegalInstance();
         }
         $exist_topic = Topic::where(Topic::COLUMN_NAME, $keyword)
-            ->field(Topic::COLUMN_ID.','.Topic::COLUMN_NAME)->
-            find();
+            ->field(Topic::COLUMN_ID.','.Topic::COLUMN_NAME)
+            ->find();
         $topics = Topic::where(Topic::COLUMN_NAME, Config::WORD_LIKE, $keyword.'%')
-            ->limit($page, $request_count)
+            ->limit($request_count)
             ->field(Topic::COLUMN_ID.','.Topic::COLUMN_NAME)
             ->select()
             ->toArray();
-        if ($exist_topic != null) {
-            array_unshift($topics, $exist_topic);
-        }
-        if (count($topics) == 0) {
+        $result = self::completeSimpleListData($exist_topic, $topics);
+        if (count($result) == 0) {
             return Response::newNoSearchResult();
         }
-        self::completeSimpleListData($topics);
-        return Response::newSuccessInstance($topics);
+        return Response::newSuccessInstance($result);
     }
 
     /**
@@ -345,21 +341,35 @@ class Topics
     }
 
     private static function buildHotSimpleListData($topics) {
-        $result = array();
         foreach ($topics as $key => $topic) {
-            $temp = new TopicResponseBean();
             $topic['name'] = self::getTopicName($topic['id']);
             $topic['visitCount'] = self::getVisitCount($topic['id']);
-            $result[$key] = $temp;
         }
-        return $result;
     }
 
-    private static function completeSimpleListData($topics) {
-        foreach ($topics as $key => $topic) {
-            $topic['joinCount'] = self::getJoinCount($topic['id']);
-            $topic['visitCount'] = self::getVisitCount($topic['id']);
+    private static function completeSimpleListData($exist_topic, $topics) {
+        $result = array();
+        if ($exist_topic != null) {
+            $temp = new TopicResponseBean();
+            $temp->id = $exist_topic['id'];
+            $temp->name = $exist_topic['name'];
+            $temp->joinCount = self::getJoinCount($exist_topic['id']);
+            $temp->visitCount= self::getVisitCount($exist_topic['id']);
+            $result[] = $temp;
         }
+
+        foreach ($topics as $topic) {
+            if ($exist_topic != null && $exist_topic['id'] == $topic['id']) {
+                continue;
+            }
+            $temp = new TopicResponseBean();
+            $temp->id = $topic['id'];
+            $temp->name = $topic['name'];
+            $temp->joinCount = self::getJoinCount($topic['id']);
+            $temp->visitCount= self::getVisitCount($topic['id']);
+            $result[] = $temp;
+        }
+        return $result;
     }
 
     private static function getTopicName($topic_id) {
